@@ -1,0 +1,6 @@
+{
+  "name": "AI Personalized Children's Story Book Platform",
+  "description": "An advanced full-stack SaaS platform for creating high-quality children's books with AI-generated, consistent characters and personalized stories.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
