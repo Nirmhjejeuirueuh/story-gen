@@ -115,6 +115,58 @@ export class OpenAIProvider {
   }
 
   /**
+   * Generates an illustration conditioned on one or more reference images (e.g. a fixed-cast
+   * story's character sheets), so the same character(s) appear consistently across pages.
+   * Falls back to plain text-to-image generation if no reference images are supplied.
+   */
+  public async generateImageWithReferences(
+    prompt: string,
+    referenceImages: { mime: string; data: string }[]
+  ): Promise<string> {
+    if (referenceImages.length === 0) {
+      return this.generateImage(prompt, IllustrationStyle.STORYBOOK);
+    }
+
+    const apiKey = this.getApiKey();
+    const model = db.settings?.openaiImageModel || "gpt-image-1";
+
+    console.log(`Attempting OpenAI reference-conditioned image generation (${model}, ${referenceImages.length} refs) for: "${prompt.slice(0, 60)}..."`);
+
+    try {
+      const form = new FormData();
+      form.append("model", model);
+      form.append("prompt", prompt);
+      form.append("size", "1024x1024");
+      referenceImages.forEach((ref, i) => {
+        const ext = ref.mime === "image/jpeg" ? "jpg" : "png";
+        const blob = new Blob([Buffer.from(ref.data, "base64")], { type: ref.mime });
+        form.append("image[]", blob, `reference_${i}.${ext}`);
+      });
+
+      const response = await fetch("https://api.openai.com/v1/images/edits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`OpenAI Image edit failed: ${response.status} - ${errText}`);
+      }
+
+      const data: any = await response.json();
+      const item = data.data?.[0];
+      if (!item?.b64_json) {
+        throw new Error("No image data returned from OpenAI edits API.");
+      }
+      return `data:image/png;base64,${item.b64_json}`;
+    } catch (error: any) {
+      console.error("OpenAI reference-conditioned image generation failed:", error.message || error);
+      throw error;
+    }
+  }
+
+  /**
    * Generates a single comprehensive character reference sheet image
    * (proportions, three-view, expression sheet, pose sheet, costume design)
    */

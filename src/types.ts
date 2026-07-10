@@ -55,10 +55,11 @@ export interface Book {
   id: string;
   title: string;
   coverTitle: string;
-  characterId: string;
+  characterId?: string; // absent for fixed-cast library storybooks
   templateId: string;
   style: IllustrationStyle;
   childName: string;
+  libraryStoryId?: string; // set when created from a filesystem Story Library entry
   pages: BookPage[];
   createdAt: string;
 }
@@ -68,10 +69,31 @@ export interface BookPage {
   pageNumber: number;
   storyText: string;
   illustrationPrompt: string;
+  characterKeys?: string[]; // Story Library character reference keys used for this page's illustration
   imageUrl?: string; // Generated image
   imageStatus: 'Queued' | 'Generating' | 'Completed' | 'Failed';
   imageError?: string;
   createdAt: string;
+}
+
+// --- Filesystem-based Story Library (server/stories/<id>/) ---
+export interface StoryLibraryCharacter {
+  key: string; // normalized lowercase filename stem, e.g. "white rabbit"
+  displayName: string; // e.g. "White Rabbit"
+}
+
+export interface StoryLibraryChapter {
+  pageNumber: number;
+  illustrationPrompt: string;
+  characterKeys: string[];
+}
+
+export interface StoryLibraryEntry {
+  id: string;
+  title: string;
+  numberOfPages: number;
+  characters: StoryLibraryCharacter[];
+  chapters: StoryLibraryChapter[];
 }
 
 export enum JobType {

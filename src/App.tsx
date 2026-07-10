@@ -21,7 +21,8 @@ import {
   Trash2,
   CheckCircle2,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Library
 } from "lucide-react";
 
 import { Character, Book, StoryTemplate, IllustrationStyle, Job, JobType } from "./types.js";
@@ -34,9 +35,10 @@ import ImageGenerationStatus from "./components/ImageGenerationStatus.tsx";
 import PDFExportDialog from "./components/PDFExportDialog.tsx";
 import TemplateConfig from "./components/TemplateConfig.tsx";
 import SystemSettings from "./components/SystemSettings.tsx";
+import StoryLibraryBrowser from "./components/StoryLibraryBrowser.tsx";
 import { DEFAULT_STYLES } from "../server/config/config.js";
 
-type Tab = "dashboard" | "wizard" | "books" | "templates" | "characters" | "jobs" | "settings";
+type Tab = "dashboard" | "wizard" | "books" | "templates" | "characters" | "jobs" | "settings" | "library";
 
 export default function App() {
   // Navigation
@@ -70,13 +72,14 @@ export default function App() {
   
   const [createdCharacter, setCreatedCharacter] = useState<Character | null>(null);
   const [charSheetJobId, setCharSheetJobId] = useState<string | null>(null);
-  const [charSheetApproved, setCharSheetApproved] = useState(false);
+  const [charSetupMode, setCharSetupMode] = useState<"new" | "existing">("new");
 
   const [selectedStyle, setSelectedStyle] = useState<IllustrationStyle>(IllustrationStyle.STORYBOOK);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   
   const [activeBook, setActiveBook] = useState<Book | null>(null);
   const [storyJobId, setStoryJobId] = useState<string | null>(null);
+  const [storyFailed, setStoryFailed] = useState(false);
 
   const [isRegeneratingPageId, setIsRegeneratingPageId] = useState<number | null>(null);
 
@@ -183,7 +186,24 @@ export default function App() {
       } else if (job.status === "Failed") {
         setWizardError(`Story Outline Generation Failed: ${job.error}`);
         setStoryJobId(null);
+        setStoryFailed(true);
       }
+    }
+  };
+
+  const handleRetryStoryGeneration = async () => {
+    if (!activeBook) return;
+    setWizardError(null);
+    setStoryFailed(false);
+    try {
+      const res = await fetch(`/api/books/${activeBook.id}/regenerate-story`, { method: "POST" });
+      const contentType = res.headers.get("content-type");
+      if (res.ok && contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        setStoryJobId(data.jobId);
+      }
+    } catch (err) {
+      console.error("Failed to retry story generation:", err);
     }
   };
 
@@ -220,6 +240,34 @@ export default function App() {
       if (activeBook?.id === id) setActiveBook(null);
     } catch (err) {
       console.error("Failed to delete book:", err);
+    }
+  };
+
+  // Create a book directly from a fixed-cast Story Library entry (bypasses personalization entirely)
+  const [isCreatingFromLibrary, setIsCreatingFromLibrary] = useState(false);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const handleCreateFromLibrary = async (libraryStoryId: string) => {
+    setIsCreatingFromLibrary(true);
+    setLibraryError(null);
+    try {
+      const res = await fetch("/api/books/from-library", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ libraryStoryId }),
+      });
+      const contentType = res.headers.get("content-type");
+      const data = (contentType && contentType.includes("application/json")) ? await res.json() : null;
+      if (!res.ok || !data) throw new Error(data?.error || "Failed to create storybook from library.");
+
+      setActiveBook(data.book);
+      setCreatedCharacter(null);
+      fetchBooks();
+      setWizardStep(6); // Straight to illustration rendering
+      setActiveTab("wizard");
+    } catch (err: any) {
+      setLibraryError(err.message);
+    } finally {
+      setIsCreatingFromLibrary(false);
     }
   };
 
@@ -266,7 +314,6 @@ export default function App() {
 
       setCreatedCharacter(data.character);
       setCharSheetJobId(data.jobId);
-      setCharSheetApproved(false);
       setWizardStep(2); // Jump to Character sheet view step
     } catch (err: any) {
       setWizardError(err.message);
@@ -276,27 +323,36 @@ export default function App() {
   };
 
   const handleApproveSheet = async (approved: boolean) => {
-    if (!createdCharacter) return;
+    if (!activeSheet) return;
     try {
-      // Find sheet from list/db
-      const sheetRes = await fetch(`/api/characters/${createdCharacter.id}/sheet`);
-      if (!sheetRes.ok) return;
-      const contentType = sheetRes.headers.get("content-type");
-      const sheet = (contentType && contentType.includes("application/json")) ? await sheetRes.json() : null;
-      if (!sheet) return;
-
-      const approveRes = await fetch(`/api/character-sheet/${sheet.id}/approve`, {
+      const approveRes = await fetch(`/api/character-sheet/${activeSheet.id}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approved }),
       });
 
-      if (approveRes.ok) {
-        setCharSheetApproved(approved);
-        if (approved) setWizardStep(3); // Forward to Style Choose
+      const contentType = approveRes.headers.get("content-type");
+      if (approveRes.ok && contentType && contentType.includes("application/json")) {
+        const data = await approveRes.json();
+        setActiveSheet(data.sheet);
+        if (approved) setWizardStep(3); // Forward to Story Book Template
       }
     } catch (err) {
       console.error("Failed to approve sheet:", err);
+    }
+  };
+
+  const handleRegenerateSheet = async () => {
+    if (!createdCharacter) return;
+    try {
+      const res = await fetch(`/api/characters/${createdCharacter.id}/regenerate-sheet`, { method: "POST" });
+      const contentType = res.headers.get("content-type");
+      if (res.ok && contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        setCharSheetJobId(data.jobId);
+      }
+    } catch (err) {
+      console.error("Failed to regenerate character sheet:", err);
     }
   };
 
@@ -333,6 +389,7 @@ export default function App() {
 
       setActiveBook(data.book);
       setStoryJobId(data.jobId);
+      setStoryFailed(false);
       setWizardStep(5); // Go to Story Text Drafting screen
     } catch (err: any) {
       setWizardError(err.message);
@@ -400,10 +457,11 @@ export default function App() {
     setCharDesc("");
     setCreatedCharacter(null);
     setCharSheetJobId(null);
-    setCharSheetApproved(false);
+    setCharSetupMode(characters.length > 0 ? "existing" : "new");
     setSelectedTemplateId(null);
     setActiveBook(null);
     setStoryJobId(null);
+    setStoryFailed(false);
     setWizardStep(1);
     setActiveTab("wizard");
   };
@@ -468,6 +526,14 @@ export default function App() {
               }`}
             >
               <BookOpen className="h-4 w-4" /> My Books
+            </button>
+            <button
+              onClick={() => setActiveTab("library")}
+              className={`w-full p-3 rounded-xl font-bold text-sm flex items-center gap-3 transition ${
+                activeTab === "library" ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
+              }`}
+            >
+              <Library className="h-4 w-4" /> Story Library
             </button>
             <button
               onClick={() => setActiveTab("templates")}
@@ -638,10 +704,10 @@ export default function App() {
               {/* Step indicator header */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex justify-between items-center select-none overflow-x-auto gap-4">
                 {[
-                  "1. Photo Upload",
+                  "1. Character",
                   "2. Character Sheet",
-                  "3. Style",
-                  "4. Choose Story",
+                  "3. Story Book Template",
+                  "4. Style",
                   "5. Text Draft",
                   "6. Render Illustrations",
                   "7. Book Preview",
@@ -691,15 +757,79 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6"
                 >
-                  <div>
-                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-1.5">
-                      Step 1: Upload Portraits of Your Child
-                    </h3>
-                    <p className="text-sm text-slate-500 mt-1">
-                      Our system will analyze these reference photos to draw a consistent character sheet. No AI training required!
-                    </p>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <h3 className="text-xl font-black text-slate-800 flex items-center gap-1.5">
+                        Step 1: Choose Your Character
+                      </h3>
+                      <p className="text-sm text-slate-500 mt-1">
+                        {charSetupMode === "existing"
+                          ? "Reuse a previously generated character reference sheet to start a new storybook instantly."
+                          : "Our system will analyze these reference photos to draw a consistent character sheet. No AI training required!"}
+                      </p>
+                    </div>
+                    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit shrink-0">
+                      <button
+                        onClick={() => setCharSetupMode("existing")}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
+                          charSetupMode === "existing" ? "bg-white shadow text-emerald-700" : "text-slate-500 hover:text-slate-700"
+                        }`}
+                      >
+                        Use Existing Character
+                      </button>
+                      <button
+                        onClick={() => setCharSetupMode("new")}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
+                          charSetupMode === "new" ? "bg-white shadow text-emerald-700" : "text-slate-500 hover:text-slate-700"
+                        }`}
+                      >
+                        Create New Character
+                      </button>
+                    </div>
                   </div>
 
+                  {charSetupMode === "existing" ? (
+                    <div className="space-y-4">
+                      {characters.length === 0 ? (
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-10 text-center text-slate-400 font-semibold">
+                          No existing character profiles yet. Switch to &ldquo;Create New Character&rdquo; to get started.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                          {characters.map((char) => (
+                            <button
+                              key={char.id}
+                              onClick={() => {
+                                setCreatedCharacter(char);
+                                setCharSheetJobId(null);
+                                setWizardStep(2);
+                              }}
+                              className="text-left bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-md rounded-2xl p-4 transition space-y-2.5"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className="h-9 w-9 rounded-full bg-slate-100 flex items-center justify-center text-base font-bold shrink-0">
+                                  👤
+                                </div>
+                                <div className="min-w-0">
+                                  <h5 className="font-extrabold text-slate-800 text-sm truncate">{char.name}</h5>
+                                  <span className="text-[10px] text-slate-400 font-bold uppercase">{char.age} y/o {char.gender}</span>
+                                </div>
+                              </div>
+                              <p className="text-xs text-slate-500 leading-normal line-clamp-2 italic">
+                                &ldquo;{char.description}&rdquo;
+                              </p>
+                              <span className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                                char.characterSheetId ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                              }`}>
+                                {char.characterSheetId ? "Reference Sheet Ready" : "Sheet Not Generated"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                  <>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Left Column: Kid Basic Details */}
                     <div className="lg:col-span-1 space-y-4">
@@ -902,6 +1032,8 @@ export default function App() {
                       {loading ? "Processing..." : "Generate Character Sheet"} <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
+                  </>
+                  )}
                 </motion.div>
               )}
 
@@ -916,18 +1048,49 @@ export default function App() {
                     character={createdCharacter}
                     sheet={activeSheet}
                     onApprove={handleApproveSheet}
-                    onRegenerate={() => {
-                      setCharSheetJobId(null);
-                      handleCreateProfile();
-                    }}
+                    onRegenerate={handleRegenerateSheet}
                     isGenerating={!!charSheetJobId}
                   />
 
-                  {charSheetApproved && (
+                  {activeSheet?.approved && (
                     <div className="flex justify-end pt-4 border-t border-slate-200">
                       <button
                         onClick={() => setWizardStep(3)}
                         className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm transition shadow flex items-center gap-1"
+                      >
+                        Choose Story Book Template <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* Wizard Step 3: Story Book Template selector */}
+              {wizardStep === 3 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="space-y-6"
+                >
+                  <StorySelector
+                    templates={templates}
+                    selectedId={selectedTemplateId}
+                    onSelect={setSelectedTemplateId}
+                    onAddCustomTemplate={handleSaveTemplate}
+                    onDeleteTemplate={handleDeleteTemplate}
+                  />
+
+                  {selectedTemplateId && (
+                    <div className="flex justify-between pt-4 border-t border-slate-200">
+                      <button
+                        onClick={() => setWizardStep(2)}
+                        className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition"
+                      >
+                        Back to Character Sheet
+                      </button>
+                      <button
+                        onClick={() => setWizardStep(4)}
+                        className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl text-sm transition shadow flex items-center gap-1"
                       >
                         Choose Illustration Style <ChevronRight className="h-4 w-4" />
                       </button>
@@ -936,8 +1099,8 @@ export default function App() {
                 </motion.div>
               )}
 
-              {/* Wizard Step 3: Choose Style */}
-              {wizardStep === 3 && (
+              {/* Wizard Step 4: Choose Style */}
+              {wizardStep === 4 && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -945,7 +1108,7 @@ export default function App() {
                 >
                   <div>
                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-1.5">
-                      Step 3: Choose Illustration Style
+                      Step 4: Choose Illustration Style
                     </h3>
                     <p className="text-sm text-slate-500 mt-1">
                       Select the visual style for your storybook's page illustrations.
@@ -975,53 +1138,19 @@ export default function App() {
 
                   <div className="pt-4 border-t border-slate-100 flex justify-between">
                     <button
-                      onClick={() => setWizardStep(2)}
+                      onClick={() => setWizardStep(3)}
                       className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition"
                     >
-                      Back to Poses
+                      Back to Story Book Template
                     </button>
                     <button
-                      onClick={() => setWizardStep(4)}
-                      className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl text-sm transition shadow flex items-center gap-1"
+                      onClick={handleGenerateStoryText}
+                      disabled={loading}
+                      className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm transition shadow flex items-center gap-1"
                     >
-                      Choose Story theme <ChevronRight className="h-4 w-4" />
+                      {loading ? "Generating Story Outline..." : "Generate Story text"} <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
-                </motion.div>
-              )}
-
-              {/* Wizard Step 4: Story selector */}
-              {wizardStep === 4 && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="space-y-6"
-                >
-                  <StorySelector
-                    templates={templates}
-                    selectedId={selectedTemplateId}
-                    onSelect={setSelectedTemplateId}
-                    onAddCustomTemplate={handleSaveTemplate}
-                    onDeleteTemplate={handleDeleteTemplate}
-                  />
-
-                  {selectedTemplateId && (
-                    <div className="flex justify-between pt-4 border-t border-slate-200">
-                      <button
-                        onClick={() => setWizardStep(3)}
-                        className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition"
-                      >
-                        Back to Style
-                      </button>
-                      <button
-                        onClick={handleGenerateStoryText}
-                        disabled={loading}
-                        className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm transition shadow flex items-center gap-1"
-                      >
-                        {loading ? "Generating Story Outline..." : "Generate Story text"} <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
                 </motion.div>
               )}
 
@@ -1032,16 +1161,44 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   className="flex flex-col items-center justify-center p-12 text-center bg-white border border-slate-200 rounded-3xl shadow-sm"
                 >
-                  <div className="relative flex h-14 w-14 items-center justify-center">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <div className="relative rounded-full h-10 w-10 bg-emerald-600 flex items-center justify-center text-white font-bold">
-                      <Sparkles className="animate-spin h-5 w-5" />
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-800 mt-4">Drafting Story Outline &amp; Text...</h3>
-                  <p className="text-sm text-slate-500 mt-2 max-w-md">
-                    Our AI is generating a customized 8-chapter narrative based on the chosen theme. We are crafting engaging story blocks and detailed illustration prompts in structured format.
-                  </p>
+                  {storyFailed ? (
+                    <>
+                      <div className="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+                        <AlertCircle className="h-7 w-7" />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-800 mt-4">Story Generation Failed</h3>
+                      <p className="text-sm text-slate-500 mt-2 max-w-md">
+                        Something went wrong while drafting the story text. Check System Settings (API keys/provider) and try again.
+                      </p>
+                      <div className="flex gap-3 mt-6">
+                        <button
+                          onClick={() => setWizardStep(3)}
+                          className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition"
+                        >
+                          Back to Template
+                        </button>
+                        <button
+                          onClick={handleRetryStoryGeneration}
+                          className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm transition shadow"
+                        >
+                          Retry Generation
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="relative flex h-14 w-14 items-center justify-center">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <div className="relative rounded-full h-10 w-10 bg-emerald-600 flex items-center justify-center text-white font-bold">
+                          <Sparkles className="animate-spin h-5 w-5" />
+                        </div>
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-800 mt-4">Drafting Story Outline &amp; Text...</h3>
+                      <p className="text-sm text-slate-500 mt-2 max-w-md">
+                        Our AI is generating a customized 8-chapter narrative based on the chosen theme. We are crafting engaging story blocks and detailed illustration prompts in structured format.
+                      </p>
+                    </>
+                  )}
                 </motion.div>
               )}
 
@@ -1060,7 +1217,7 @@ export default function App() {
                   {/* Move to preview once illustrations are generated */}
                   <div className="flex justify-between pt-4 border-t border-slate-200">
                     <button
-                      onClick={() => setWizardStep(4)}
+                      onClick={() => setWizardStep(3)}
                       className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition"
                     >
                       Change Theme / Template
@@ -1138,6 +1295,26 @@ export default function App() {
                   </div>
                 </motion.div>
               )}
+            </motion.div>
+          )}
+
+          {/* --- TAB: STORY LIBRARY (fixed-cast, filesystem-authored storybooks) --- */}
+          {activeTab === "library" && (
+            <motion.div
+              key="library-tab"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              className="space-y-6"
+            >
+              {libraryError && (
+                <div className="flex items-center gap-2.5 p-4 bg-red-50 text-red-800 border border-red-100 rounded-2xl text-sm font-semibold">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <span>{libraryError}</span>
+                  <button onClick={() => setLibraryError(null)} className="ml-auto font-bold">✕</button>
+                </div>
+              )}
+              <StoryLibraryBrowser onCreate={handleCreateFromLibrary} isCreating={isCreatingFromLibrary} />
             </motion.div>
           )}
 

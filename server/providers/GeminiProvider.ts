@@ -95,6 +95,55 @@ export class GeminiProvider {
   }
 
   /**
+   * Generates an illustration conditioned on one or more reference images (e.g. a fixed-cast
+   * story's character sheets), so the same character(s) appear consistently across pages.
+   * Falls back to plain text-to-image generation if no reference images are supplied.
+   */
+  public async generateImageWithReferences(
+    prompt: string,
+    referenceImages: { mime: string; data: string }[],
+    style: IllustrationStyle
+  ): Promise<string> {
+    if (referenceImages.length === 0) {
+      return this.generateImage(prompt, style);
+    }
+
+    try {
+      const ai = this.getAI();
+      console.log(`Attempting Gemini reference-conditioned image generation (${referenceImages.length} refs) for: "${prompt.slice(0, 60)}..."`);
+
+      const parts: any[] = referenceImages.map((ref) => ({
+        inlineData: { mimeType: ref.mime, data: ref.data }
+      }));
+      parts.push({ text: prompt });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-lite-image",
+        contents: { parts },
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1"
+          }
+        }
+      });
+
+      if (response && response.candidates?.[0]?.content?.parts) {
+        for (const part of response.candidates[0].content.parts) {
+          if (part.inlineData && part.inlineData.data) {
+            const mime = part.inlineData.mimeType || "image/png";
+            return `data:${mime};base64,${part.inlineData.data}`;
+          }
+        }
+      }
+      console.warn("No inline image data found in Gemini reference-conditioned response. Falling back to procedurally designed scene.");
+    } catch (error: any) {
+      console.error("Gemini reference-conditioned image generation failed. Falling back to procedural design. Error:", error.message || error);
+    }
+
+    return this.createProceduralIllustration(prompt, style);
+  }
+
+  /**
    * Generates a single comprehensive character reference sheet image
    * (proportions, three-view, expression sheet, pose sheet, costume design).
    * generateImage already falls back to a procedural illustration internally on failure.

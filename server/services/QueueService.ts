@@ -10,6 +10,7 @@ import { BookRepository } from "../repositories/BookRepository.js";
 import { promptEngine } from "../providers/PromptEngine.js";
 import { geminiProvider } from "../providers/GeminiProvider.js";
 import { openaiProvider } from "../providers/OpenAIProvider.js";
+import { storyLibraryService } from "./StoryLibraryService.js";
 import { db } from "../database/db.js";
 
 export class QueueService {
@@ -260,43 +261,60 @@ export class QueueService {
     const book = await this.bookRepo.findById(bookId);
     if (!book) throw new Error(`Book ${bookId} not found.`);
 
-    const char = await this.characterRepo.findById(book.characterId);
-    if (!char) throw new Error(`Character ${book.characterId} not found.`);
-
     const page = book.pages.find(p => p.pageNumber === pageNumber);
     if (!page) throw new Error(`Book page ${pageNumber} not found.`);
 
     await this.bookRepo.updatePage(bookId, pageNumber, { imageStatus: "Generating" });
     await this.jobRepo.update(job.id, { progress: 30 });
 
-    // Fetch character sheet details for consistency context
-    let sheetDetails = "Use a friendly cartoon styling with distinct features.";
-    if (char.characterSheetId) {
-      const sheet = await this.characterRepo.findSheetById(char.characterSheetId);
-      if (sheet) {
-        sheetDetails = "An approved character reference sheet is on file (three-view drawing, expression sheet, pose sheet, and costume design). Ensure hairstyle, clothes color palette, and face proportions match it exactly.";
+    const imageProvider = db.settings?.imageProvider || "gemini";
+    let imageUrl: string;
+
+    if (book.libraryStoryId) {
+      // Fixed-cast Story Library book: use the hand-authored prompt verbatim, conditioned
+      // on the referenced characters' reference sheet images for visual consistency.
+      const referenceImages = (page.characterKeys || [])
+        .map((key) => storyLibraryService.getCharacterImageBase64(book.libraryStoryId!, key))
+        .filter((ref): ref is { mime: string; data: string } => !!ref);
+
+      await this.jobRepo.update(job.id, { progress: 50 });
+
+      imageUrl = imageProvider === "openai"
+        ? await openaiProvider.generateImageWithReferences(page.illustrationPrompt, referenceImages)
+        : (imageProvider === "procedural"
+            ? geminiProvider.createProceduralIllustration(page.illustrationPrompt, book.style)
+            : await geminiProvider.generateImageWithReferences(page.illustrationPrompt, referenceImages, book.style));
+    } else {
+      const char = await this.characterRepo.findById(book.characterId!);
+      if (!char) throw new Error(`Character ${book.characterId} not found.`);
+
+      // Fetch character sheet details for consistency context
+      let sheetDetails = "Use a friendly cartoon styling with distinct features.";
+      if (char.characterSheetId) {
+        const sheet = await this.characterRepo.findSheetById(char.characterSheetId);
+        if (sheet) {
+          sheetDetails = "An approved character reference sheet is on file (three-view drawing, expression sheet, pose sheet, and costume design). Ensure hairstyle, clothes color palette, and face proportions match it exactly.";
+        }
       }
+
+      const imagePrompt = promptEngine.generateIllustrationPrompt(
+        pageNumber,
+        page.illustrationPrompt.replace(/MAIN_CHARACTER/g, book.childName),
+        book.style,
+        char.name,
+        char.description,
+        sheetDetails
+      );
+
+      await this.jobRepo.update(job.id, { progress: 50 });
+
+      imageUrl = imageProvider === "openai"
+        ? await openaiProvider.generateImage(imagePrompt, book.style)
+        : (imageProvider === "procedural"
+            ? geminiProvider.createProceduralIllustration(imagePrompt, book.style)
+            : await geminiProvider.generateImage(imagePrompt, book.style));
     }
 
-    const imagePrompt = promptEngine.generateIllustrationPrompt(
-      pageNumber,
-      page.illustrationPrompt.replace(/MAIN_CHARACTER/g, book.childName),
-      book.style,
-      char.name,
-      char.description,
-      sheetDetails
-    );
-
-    await this.jobRepo.update(job.id, { progress: 50 });
-
-    // Generate illustration with the configured provider
-    const imageProvider = db.settings?.imageProvider || "gemini";
-    const imageUrl = imageProvider === "openai"
-      ? await openaiProvider.generateImage(imagePrompt, book.style)
-      : (imageProvider === "procedural"
-          ? geminiProvider.createProceduralIllustration(imagePrompt, book.style)
-          : await geminiProvider.generateImage(imagePrompt, book.style));
-    
     await this.bookRepo.updatePage(bookId, pageNumber, {
       imageUrl,
       imageStatus: "Completed"

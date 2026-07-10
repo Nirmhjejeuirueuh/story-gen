@@ -73,6 +73,30 @@ export class CharacterController {
   };
 
   /**
+   * Re-queues reference sheet generation for an existing character profile
+   */
+  public regenerateCharacterSheet = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params; // characterId
+      const char = await this.characterRepo.findById(id);
+      if (!char) {
+        res.status(404).json({ error: "Character profile not found." });
+        return;
+      }
+
+      const job = await this.queueService.addJob(JobType.CHARACTER_SHEET, { characterId: id });
+
+      res.status(202).json({
+        message: "Character reference sheet regeneration queued.",
+        jobId: job.id
+      });
+    } catch (error: any) {
+      console.error("[CharacterController] Error regenerating sheet:", error);
+      res.status(500).json({ error: "Failed to regenerate character sheet: " + error.message });
+    }
+  };
+
+  /**
    * Retrieves a character's reference sheet
    */
   public getCharacterSheetByCharacterId = async (req: Request, res: Response): Promise<void> => {

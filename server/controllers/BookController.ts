@@ -7,7 +7,8 @@ import { Request, Response } from "express";
 import { BookRepository } from "../repositories/BookRepository.js";
 import { JobRepository } from "../repositories/JobRepository.js";
 import { QueueService } from "../services/QueueService.js";
-import { JobType, Book, BookPage, StoryTemplate } from "../../src/types.js";
+import { storyLibraryService } from "../services/StoryLibraryService.js";
+import { JobType, Book, BookPage, StoryTemplate, IllustrationStyle } from "../../src/types.js";
 
 export class BookController {
   constructor(
@@ -55,6 +56,92 @@ export class BookController {
     } catch (error: any) {
       console.error("[BookController] Error creating book:", error);
       res.status(500).json({ error: "Failed to create book: " + error.message });
+    }
+  };
+
+  /**
+   * Re-queues story text generation for an existing book (e.g. after a failed attempt)
+   */
+  public regenerateStoryText = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const book = await this.bookRepo.findById(id);
+      if (!book) {
+        res.status(404).json({ error: "Book not found." });
+        return;
+      }
+
+      const job = await this.queueService.addJob(JobType.STORY, {
+        bookId: book.id,
+        templateId: book.templateId,
+        style: book.style,
+        childName: book.childName,
+        numberOfPages: 8
+      });
+
+      res.status(202).json({
+        message: "Story generation re-queued.",
+        jobId: job.id
+      });
+    } catch (error: any) {
+      console.error("[BookController] Error regenerating story text:", error);
+      res.status(500).json({ error: "Failed to regenerate story text: " + error.message });
+    }
+  };
+
+  /**
+   * Creates a book directly from a fixed-cast filesystem Story Library entry.
+   * No personalized character, style choice, or AI text generation is involved -
+   * pages are built synchronously from the hand-authored chapter illustration prompts.
+   */
+  public createBookFromLibrary = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { libraryStoryId } = req.body;
+      if (!libraryStoryId) {
+        res.status(400).json({ error: "Field 'libraryStoryId' is required." });
+        return;
+      }
+
+      const story = storyLibraryService.getStory(libraryStoryId);
+      if (!story) {
+        res.status(404).json({ error: "Story library entry not found." });
+        return;
+      }
+
+      const pages: BookPage[] = story.chapters.map((chapter) => ({
+        id: "page_" + Math.random().toString(36).substring(2, 11),
+        pageNumber: chapter.pageNumber,
+        storyText: "",
+        illustrationPrompt: chapter.illustrationPrompt,
+        characterKeys: chapter.characterKeys,
+        imageStatus: "Queued",
+        createdAt: new Date().toISOString()
+      }));
+
+      const castNames = story.characters.map((c) => c.displayName).join(", ");
+
+      const book: Book = {
+        id: "book_" + Math.random().toString(36).substring(2, 11),
+        title: story.title,
+        coverTitle: story.title,
+        templateId: story.id,
+        libraryStoryId: story.id,
+        style: IllustrationStyle.STORYBOOK,
+        childName: castNames || story.title,
+        pages,
+        createdAt: new Date().toISOString()
+      };
+
+      const saved = await this.bookRepo.create(book);
+      console.log(`[BookController] Storybook created from library entry: ${saved.id} (${story.id})`);
+
+      res.status(201).json({
+        message: "Storybook created from story library template.",
+        book: saved
+      });
+    } catch (error: any) {
+      console.error("[BookController] Error creating book from library:", error);
+      res.status(500).json({ error: "Failed to create book from story library: " + error.message });
     }
   };
 
