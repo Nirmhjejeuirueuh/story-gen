@@ -284,6 +284,10 @@ export class QueueService {
         : (imageProvider === "procedural"
             ? geminiProvider.createProceduralIllustration(page.illustrationPrompt, book.style)
             : await geminiProvider.generateImageWithReferences(page.illustrationPrompt, referenceImages, book.style));
+
+      // Cache the render to the story template's own illustrations folder on disk so it
+      // can be reused/inspected from the Story Library browser without regenerating.
+      storyLibraryService.saveIllustration(book.libraryStoryId, pageNumber, imageUrl);
     } else {
       const char = await this.characterRepo.findById(book.characterId!);
       if (!char) throw new Error(`Character ${book.characterId} not found.`);

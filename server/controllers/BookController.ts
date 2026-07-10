@@ -111,7 +111,7 @@ export class BookController {
       const pages: BookPage[] = story.chapters.map((chapter) => ({
         id: "page_" + Math.random().toString(36).substring(2, 11),
         pageNumber: chapter.pageNumber,
-        storyText: "",
+        storyText: chapter.storyText,
         illustrationPrompt: chapter.illustrationPrompt,
         characterKeys: chapter.characterKeys,
         imageStatus: "Queued",

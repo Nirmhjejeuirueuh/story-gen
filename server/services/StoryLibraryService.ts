@@ -42,7 +42,9 @@ export class StoryLibraryService {
       for (const f of files) {
         const pageNumber = parseInt(path.basename(f, path.extname(f)), 10);
         if (!Number.isFinite(pageNumber)) continue;
-        chapters.push(this.parseChapterFile(path.join(chaptersDir, f), pageNumber));
+        const chapter = this.parseChapterFile(path.join(chaptersDir, f), pageNumber);
+        chapter.hasIllustration = !!this.findIllustrationFile(id, pageNumber);
+        chapters.push(chapter);
       }
       chapters.sort((a, b) => a.pageNumber - b.pageNumber);
     }
@@ -84,6 +86,53 @@ export class StoryLibraryService {
     return this.findCharacterFile(storyId, key);
   }
 
+  /**
+   * Resolves the on-disk path to a chapter's cached illustration, if one has been generated
+   */
+  public getIllustrationPath(storyId: string, pageNumber: number): string | null {
+    return this.findIllustrationFile(storyId, pageNumber);
+  }
+
+  /**
+   * Persists a generated chapter illustration (data URI) to the story's own
+   * `illustrations` folder on disk, e.g. server/stories/<storyId>/illustrations/3.png
+   * Overwrites any previously cached illustration for that page (in any format).
+   */
+  public saveIllustration(storyId: string, pageNumber: number, dataUri: string): string | null {
+    const storyDir = path.join(this.storiesRoot, storyId);
+    if (!fs.existsSync(storyDir) || !fs.statSync(storyDir).isDirectory()) return null;
+
+    const match = /^data:image\/([a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUri);
+    if (!match) return null;
+
+    const [, subtype, base64Data] = match;
+    const ext = subtype === "svg+xml" ? "svg" : subtype === "jpeg" ? "jpg" : subtype;
+
+    const illustrationsDir = path.join(storyDir, "illustrations");
+    if (!fs.existsSync(illustrationsDir)) {
+      fs.mkdirSync(illustrationsDir, { recursive: true });
+    }
+
+    // Remove any stale cached copy in a different format before writing the fresh one
+    const existing = this.findIllustrationFile(storyId, pageNumber);
+    if (existing && path.basename(existing) !== `${pageNumber}.${ext}`) {
+      fs.unlinkSync(existing);
+    }
+
+    const filePath = path.join(illustrationsDir, `${pageNumber}.${ext}`);
+    fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"));
+    return filePath;
+  }
+
+  private findIllustrationFile(storyId: string, pageNumber: number): string | null {
+    const illustrationsDir = path.join(this.storiesRoot, storyId, "illustrations");
+    if (!fs.existsSync(illustrationsDir)) return null;
+
+    const files = fs.readdirSync(illustrationsDir).filter((f) => /\.(png|jpe?g|svg)$/i.test(f));
+    const match = files.find((f) => path.basename(f, path.extname(f)) === String(pageNumber));
+    return match ? path.join(illustrationsDir, match) : null;
+  }
+
   private findCharacterFile(storyId: string, key: string): string | null {
     const storyDir = path.join(this.storiesRoot, storyId);
     const charsDir = this.findSubdir(storyDir, CHARACTERS_DIR_NAMES);
@@ -104,24 +153,53 @@ export class StoryLibraryService {
     return null;
   }
 
+  /**
+   * Parses a chapter file. Supports the labeled format:
+   *   Story: <narrative text>
+   *
+   *   Illustration: <image generation prompt>
+   *
+   *   Charators: alice, white rabbit
+   *
+   * For backward compatibility, files with no "Story:"/"Illustration:" labels are treated
+   * as a bare illustration prompt (everything before the Charators line), with no story text.
+   */
   private parseChapterFile(filePath: string, pageNumber: number): StoryLibraryChapter {
     const raw = fs.readFileSync(filePath, "utf-8");
     const lines = raw.split(/\r?\n/);
 
     const charLineIdx = lines.findIndex((l) => /^(charators|characters)\s*:/i.test(l.trim()));
+    const bodyLines = charLineIdx === -1 ? lines : lines.slice(0, charLineIdx);
+    const characterKeys = charLineIdx === -1
+      ? []
+      : lines[charLineIdx]
+          .replace(/^[^:]*:/, "")
+          .split(",")
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean);
 
-    if (charLineIdx === -1) {
-      return { pageNumber, illustrationPrompt: raw.trim(), characterKeys: [] };
+    const storyLineIdx = bodyLines.findIndex((l) => /^story(\s*text)?\s*:/i.test(l.trim()));
+    const illustrationLineIdx = bodyLines.findIndex((l) => /^illustration(\s*prompt)?\s*:/i.test(l.trim()));
+
+    let storyText = "";
+    let illustrationPrompt: string;
+
+    if (illustrationLineIdx !== -1) {
+      if (storyLineIdx !== -1) {
+        storyText = [
+          bodyLines[storyLineIdx].replace(/^story(\s*text)?\s*:/i, "").trim(),
+          ...bodyLines.slice(storyLineIdx + 1, illustrationLineIdx)
+        ].join("\n").trim();
+      }
+      illustrationPrompt = [
+        bodyLines[illustrationLineIdx].replace(/^illustration(\s*prompt)?\s*:/i, "").trim(),
+        ...bodyLines.slice(illustrationLineIdx + 1)
+      ].join("\n").trim();
+    } else {
+      illustrationPrompt = bodyLines.join("\n").trim();
     }
 
-    const illustrationPrompt = lines.slice(0, charLineIdx).join("\n").trim();
-    const characterKeys = lines[charLineIdx]
-      .replace(/^[^:]*:/, "")
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-
-    return { pageNumber, illustrationPrompt, characterKeys };
+    return { pageNumber, storyText, illustrationPrompt, characterKeys };
   }
 
   private deriveTitle(id: string): string {

@@ -84,8 +84,10 @@ export interface StoryLibraryCharacter {
 
 export interface StoryLibraryChapter {
   pageNumber: number;
+  storyText: string;
   illustrationPrompt: string;
   characterKeys: string[];
+  hasIllustration?: boolean; // true when a cached illustration exists on disk under illustrations/
 }
 
 export interface StoryLibraryEntry {

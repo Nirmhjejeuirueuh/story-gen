@@ -49,6 +49,8 @@ router.post("/character-sheet/:id/approve", characterController.approveCharacter
 router.get("/story-library", storyLibraryController.listStories);
 router.get("/story-library/:id", storyLibraryController.getStory);
 router.get("/story-library/:id/characters/:key/image", storyLibraryController.getCharacterImage);
+router.get("/story-library/:id/chapters/:pageNumber/illustration", storyLibraryController.getChapterIllustration);
+router.post("/story-library/:id/chapters/:pageNumber/regenerate-illustration", storyLibraryController.regenerateChapterIllustration);
 
 // Books Management
 router.post("/books", RequestValidator.validateBook, bookController.createBook);

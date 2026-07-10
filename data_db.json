@@ -51,7 +51,7 @@
       "id": "sheet_3rz79ntnz",
       "characterId": "char_iut30dc44",
       "sheetImage": "data:image/svg+xml;base64,CiAgICAgIDxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSIwIDAgNjAwIDQwMCIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSI+CiAgICAgICAgPHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0MDAiIGZpbGw9IiNmOGZhZmMiIC8+CiAgICAgICAgPHJlY3QgeD0iMTAiIHk9IjEwIiB3aWR0aD0iNTgwIiBoZWlnaHQ9IjM4MCIgcng9IjEwIiBmaWxsPSJub25lIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWRhc2hhcnJheT0iNSA1IiAvPgoKICAgICAgICA8cmVjdCB4PSIxODAiIHk9IjMwIiB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI4IiByeD0iNCIgZmlsbD0iIzY0NzQ4YiIgLz4KICAgICAgICA8dGV4dCB4PSIzMDAiIHk9IjQ5IiBmb250LWZhbWlseT0ibW9ub3NwYWNlIiBmb250LXNpemU9IjEyIiBmaWxsPSIjZmZmZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXdlaWdodD0iYm9sZCIgbGV0dGVyLXNwYWNpbmc9IjEiPgogICAgICAgICAgQ0hBUkFDVEVSIFJFRkVSRU5DRSBTSEVFVAogICAgICAgIDwvdGV4dD4KCiAgICAgICAgPHRleHQgeD0iMzAwIiB5PSIyMjAiIGZvbnQtc2l6ZT0iOTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfp5E8L3RleHQ+CgogICAgICAgIDxyZWN0IHg9IjYwIiB5PSIzMzAiIHdpZHRoPSI0ODAiIGhlaWdodD0iMjYiIHJ4PSI0IiBmaWxsPSIjNjQ3NDhiIiAvPgogICAgICAgIDx0ZXh0IHg9IjMwMCIgeT0iMzQ4IiBmb250LWZhbWlseT0ibW9ub3NwYWNlIiBmb250LXNpemU9IjEwIiBmaWxsPSIjZmZmZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXdlaWdodD0iYm9sZCIgbGV0dGVyLXNwYWNpbmc9IjEiPgogICAgICAgICAgU0hFRVQgR0VORVJBVElPTiBGQUlMRUQgLSBQUk9DRURVUkFMIFBMQUNFSE9MREVSCiAgICAgICAgPC90ZXh0PgogICAgICA8L3N2Zz4KICAgIA==",
-      "approved": false,
+      "approved": true,
       "createdAt": "2026-07-09T17:31:56.339Z"
     }
   ],
@@ -223,6 +223,711 @@
         }
       ],
       "createdAt": "2026-07-10T06:30:02.964Z"
+    },
+    {
+      "id": "book_2x4b3ili5",
+      "title": "Illustrations",
+      "coverTitle": "Illustrations",
+      "templateId": "illustrations",
+      "libraryStoryId": "illustrations",
+      "style": "Storybook",
+      "childName": "Illustrations",
+      "pages": [],
+      "createdAt": "2026-07-10T06:37:46.886Z"
+    },
+    {
+      "id": "book_zsn97y643",
+      "title": "Alices Adventures In Wonderland",
+      "coverTitle": "Alices Adventures In Wonderland",
+      "templateId": "t1-alices-adventures-in-wonderland",
+      "libraryStoryId": "t1-alices-adventures-in-wonderland",
+      "style": "Storybook",
+      "childName": "Alice, Cheshire Cat, White Rabbit",
+      "pages": [
+        {
+          "id": "page_ss7gjvql3",
+          "pageNumber": 1,
+          "storyText": "",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore sitting on a sunny riverbank beside an older girl reading a book, lush green meadow, a startled White Rabbit in a yellow checked waistcoat running past clutching a pocket watch, golden afternoon light, wildflowers, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "white rabbit"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T06:38:06.538Z"
+        },
+        {
+          "id": "page_61vd240ev",
+          "pageNumber": 2,
+          "storyText": "",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore falling gently down a wide dark rabbit hole, floating past wooden shelves holding jam jars, candles, antique maps and clocks fixed to the walls, dreamy weightless atmosphere, soft amber glow from above fading to deep blue below, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T06:38:06.538Z"
+        },
+        {
+          "id": "page_26owens3o",
+          "pageNumber": 3,
+          "storyText": "",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore kneeling on a tiled floor in a long corridor of locked wooden doors, holding a tiny golden key, peering through a small curtained door at a glimpse of a sunlit garden with flowers and fountains beyond, mysterious warm light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T06:38:06.538Z"
+        }
+      ],
+      "createdAt": "2026-07-10T06:38:06.538Z"
+    },
+    {
+      "id": "book_c652xiv7t",
+      "title": "Alices Adventures In Wonderland",
+      "coverTitle": "Alices Adventures In Wonderland",
+      "templateId": "t1-alices-adventures-in-wonderland",
+      "libraryStoryId": "t1-alices-adventures-in-wonderland",
+      "style": "Storybook",
+      "childName": "Alice, Cheshire Cat, White Rabbit",
+      "pages": [
+        {
+          "id": "page_mciespeb0",
+          "pageNumber": 1,
+          "storyText": "",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore sitting on a sunny riverbank beside an older girl reading a book, lush green meadow, a startled White Rabbit in a yellow checked waistcoat running past clutching a pocket watch, golden afternoon light, wildflowers, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "white rabbit"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_fozdcl5t3",
+          "pageNumber": 2,
+          "storyText": "",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore falling gently down a wide dark rabbit hole, floating past wooden shelves holding jam jars, candles, antique maps and clocks fixed to the walls, dreamy weightless atmosphere, soft amber glow from above fading to deep blue below, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_w0lot18gp",
+          "pageNumber": 3,
+          "storyText": "",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore kneeling on a tiled floor in a long corridor of locked wooden doors, holding a tiny golden key, peering through a small curtained door at a glimpse of a sunlit garden with flowers and fountains beyond, mysterious warm light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_2brtkpwwl",
+          "pageNumber": 4,
+          "storyText": "Alice found a bottle on the table with a label that said DRINK ME. It tasted of cherry tart and pineapple and roast turkey — and she shrank very small indeed. Then a little cake labelled EAT ME made her shoot up so tall her head bumped the ceiling. Nothing in Wonderland, it seemed, ever stayed the right size.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore in two sizes shown side by side — tiny beside a tall table holding a glass bottle labelled DRINK ME on the left, and enormously tall with head near the ceiling on the right, whimsical scale contrast, soft glowing light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_2roow0a8j",
+          "pageNumber": 5,
+          "storyText": "Alice had cried so many giant tears when she was tall that the whole hall had flooded into a shallow pool. Now tiny again, she found herself swimming alongside a Mouse, a Duck, a Dodo, a young Eaglet, and several other sodden creatures — all looking rather bedraggled and put out.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore swimming in a glittering shallow pool of water alongside a dignified mouse, a duck, a dodo bird, and various small animals, all looking surprised and waterlogged, golden light reflecting on the water, warm tiled walls, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "the mouse",
+            "the dodo"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_tfxborfmd",
+          "pageNumber": 6,
+          "storyText": "To get dry, the Dodo announced a Caucus Race. He marked out a course — a sort of circle — and everyone ran about as they pleased. When they stopped, he declared that everybody had won, and all must have prizes. Alice handed out comfits from her pocket, receiving her own thimble back as her prize.",
+          "illustrationPrompt": "A pompous dodo bird in a bow tie presiding over a circular running race, a young curious girl in a blue dress and white pinafore and a crowd of cheerful wet animals running in different directions in a bright meadow, confetti, comic joyful energy, warm afternoon light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "the dodo",
+            "the mouse"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_6xui76f7e",
+          "pageNumber": 7,
+          "storyText": "The Mouse promised to tell Alice something very dry — his own history. He began in a long winding voice that seemed to curl around the room like his tail. But Alice kept thinking of Dinah the cat, and the Mouse grew very offended and swam away without another word.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore leaning forward attentively listening to a small dignified mouse standing on a smooth pebble, other wet animals seated around in a semicircle, the mouse's tail curling elegantly behind him, gentle riverside setting, soft light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "the mouse"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_e4kboq0vn",
+          "pageNumber": 8,
+          "storyText": "The White Rabbit had mistaken Alice for his housemaid and sent her into his little cottage to fetch his gloves. Inside she found a small bottle and drank from it — and grew and grew until she filled every room, her arms out of the windows and one foot up the chimney.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore grown absolutely enormous filling a tiny cosy cottage interior, arms poking out of windows, legs taking up the whole floor, looking bewildered and amused, floral wallpaper, teacups on shelves, warm cottage light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "white rabbit"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_79nm5egwu",
+          "pageNumber": 9,
+          "storyText": "Outside, a great commotion. The White Rabbit and a crowd of animals tried everything to get Alice out — even sending a small lizard called Bill down the chimney. They threw pebbles through the window that turned into little cakes when they hit the floor. Alice ate one, shrank at once, and ran out into the woods.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore newly shrunk to small size dashing out of a cottage door into a sunlit garden, a crowd of animals including the White Rabbit and a startled lizard looking astonished outside, tiny cakes and pebbles scattered on the ground, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "white rabbit",
+            "bill the lizard"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_h0g39n8xk",
+          "pageNumber": 10,
+          "storyText": "In a quiet part of the forest, Alice came upon a large mushroom — and on top of it sat a large blue Caterpillar, smoking a long hookah pipe with great languid authority. He stared at her without a greeting. Then, very slowly, he asked: 'Who are you?'",
+          "illustrationPrompt": "A large plump blue caterpillar perched atop a giant mushroom smoking a hookah, blowing smoke rings that form question marks and letters, a young curious girl in a blue dress and white pinafore standing below looking up curiously, dappled forest light, ferns and mushrooms around, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "caterpillar"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_t4sxki8qn",
+          "pageNumber": 11,
+          "storyText": "The Caterpillar told Alice that one side of the mushroom would make her grow taller and the other would make her smaller. Then he crawled away without ceremony. Alice broke off a piece from each side and kept them carefully — at last she had some control over her own size.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore carefully breaking a piece from each side of an enormous mushroom in a quiet forest, the caterpillar visible crawling away in the background trailing smoke, dappled green light, sense of quiet discovery, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "caterpillar"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_qqircog3v",
+          "pageNumber": 12,
+          "storyText": "Alice found a house with a Fish Footman at the door and a Frog Footman sitting on the step. Inside, the kitchen was full of pepper smoke and sneezing. The Cook stirred an enormous pot, the Duchess nursed a howling baby, and in the corner — grinning from ear to ear — sat the Cheshire Cat.",
+          "illustrationPrompt": "A chaotic Victorian kitchen full of pepper smoke, a stout Duchess in a large bonnet holding a screaming baby, a cook stirring a huge bubbling pot, a young curious girl in a blue dress and white pinafore standing in the doorway looking alarmed, a wide grinning striped cat on a shelf, two footmen visible outside, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "duchess",
+            "the cook",
+            "cheshire cat",
+            "frog footman",
+            "fish footman"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_3ag2m73d8",
+          "pageNumber": 13,
+          "storyText": "The Duchess thrust the baby into Alice's arms and rushed off. As Alice carried it into the open air, the baby began to grunt. She looked down — it had an unmistakably turned-up nose. By the time she set it down it was quite definitely a pig, and it trotted off into the forest quite happily.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore standing in a garden path looking down with wide eyes at a small chubby pig trotting away into the trees, a trail of tiny hoofprints in the soft earth, dappled forest light, flowers and hedges around, gentle comic wonder, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_0bl9oceqf",
+          "pageNumber": 14,
+          "storyText": "The Cheshire Cat appeared in a large tree above the path, grinning enormously. He told Alice that the Mad Hatter lived one way, and the March Hare the other — and that both were mad, but that was rather the rule in Wonderland. Then he faded away very gradually until nothing was left but his enormous smile, hanging in the air.",
+          "illustrationPrompt": "A striped cat's enormous grin floating in the branches of a twilight tree, the cat's body gradually fading to invisibility, a young curious girl in a blue dress and white pinafore below on the path looking up at the floating smile with curiosity, warm purple and amber evening light through the trees, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "cheshire cat"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_zmnt30z8q",
+          "pageNumber": 15,
+          "storyText": "Alice arrived at a long table set under a great tree in the garden. The Mad Hatter and the March Hare had their elbows on a sleeping Dormouse between them. There were cups and teapots everywhere. 'No room! No room!' they cried, though there was plenty of room. Alice sat down anyway.",
+          "illustrationPrompt": "A long garden tea table under a large tree covered in mismatched teacups and steaming teapots, the Mad Hatter in a tall green top hat and the March Hare sitting either side of a tiny sleeping mouse, a young curious girl in a blue dress and white pinafore pulling out a chair at the end, afternoon light through leaves, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mad hatter",
+            "march hare",
+            "dormouse"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_0yggynq0w",
+          "pageNumber": 16,
+          "storyText": "The Mad Hatter asked Alice a riddle — why is a raven like a writing desk? — and then admitted he had absolutely no idea of the answer. He took out his pocket watch, complained it showed the wrong day, and tried dipping it in his tea to fix it. The March Hare suggested butter would have worked better.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore looking puzzled across the tea table at the Mad Hatter holding up a pocket watch with a baffled expression, the March Hare pouring tea wildly, the Dormouse asleep between them with a teacup balanced on his head, garden party chaos, warm dappled light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mad hatter",
+            "march hare",
+            "dormouse"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_gg96fembl",
+          "pageNumber": 17,
+          "storyText": "In the royal garden, Alice came upon three card soldiers frantically painting white roses red with large brushes. They whispered that they had planted the wrong color by mistake and the Queen would have their heads if she found out. Alice helped hide them just as the royal procession arrived.",
+          "illustrationPrompt": "Three flat playing-card soldiers on ladders painting white roses red in a formal garden, paint dripping, a young curious girl in a blue dress and white pinafore watching with wide eyes, red and white rose bushes everywhere, distant sound of trumpets, royal banners in the far background, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "knave of hearts"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_to4nfurnv",
+          "pageNumber": 18,
+          "storyText": "Alice was given a flamingo as a mallet and a hedgehog as a ball. Every time she got the flamingo into position it twisted around to look at her. Every time she aimed the hedgehog it uncurled and walked away. The Queen of Hearts roamed the ground shouting 'Off with their heads!' at nearly everyone.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore trying to play croquet using a pink flamingo as a mallet, the flamingo turning to look at her quizzically, a hedgehog ball uncurling and wandering off, the Queen of Hearts pointing imperiously in the background, chaotic royal garden, bright afternoon, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "queen of hearts",
+            "king of hearts",
+            "cheshire cat"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_klh22obu4",
+          "pageNumber": 19,
+          "storyText": "The Queen sent Alice with a loud Gryphon to hear the Mock Turtle's story. They found him sitting on a lonely rock, weeping enormous slow tears. He told them about his school under the sea where the master was an old turtle — they called him Tortoise because he taught them — and the subjects included reeling and writhing.",
+          "illustrationPrompt": "A weeping turtle with a calf's head sitting on a sea rock shedding large tears, a proud Gryphon standing beside him, a young curious girl in a blue dress and white pinafore seated on the pebbled shore listening with sympathetic attention, misty grey-blue ocean stretching behind them, soft melancholy light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mock turtle",
+            "the gryphon"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_bw84rkb6y",
+          "pageNumber": 20,
+          "storyText": "The Mock Turtle and the Gryphon stood up and demonstrated the Lobster Quadrille — a grand dance where you advance two by two with lobsters as partners, throw them out to sea, swim after them, turn a somersault and come back. Alice thought it sounded rather wonderful and tried to imagine it.",
+          "illustrationPrompt": "The Mock Turtle and the Gryphon dancing an elaborate sea-dance on a beach at sunset, lobsters leaping joyfully into ocean waves in the background, a young curious girl in a blue dress and white pinafore watching with delight from the shore, warm amber and pink sunset light on the water, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mock turtle",
+            "the gryphon"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_2x2ljuayf",
+          "pageNumber": 21,
+          "storyText": "Back at the court, the King of Hearts sat on a throne wearing his crown and a long wig. The White Rabbit acted as herald and read out the charge in a clear loud voice. The Knave of Hearts was accused of stealing the Queen's tarts. A jury of twelve animals — including Bill the Lizard — sat in a wooden box with small slates.",
+          "illustrationPrompt": "A grand royal courtroom scene, the King of Hearts seated on a tall throne wearing a wig and crown, the White Rabbit standing as herald reading from a scroll, a jury box of animals with small slates, the Knave of Hearts standing accused, a young curious girl in a blue dress and white pinafore in the gallery watching, royal banners, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "king of hearts",
+            "queen of hearts",
+            "white rabbit",
+            "knave of hearts",
+            "bill the lizard"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_9ge1rdy5h",
+          "pageNumber": 22,
+          "storyText": "The Mad Hatter was called as a witness and arrived still holding his teacup, which he was afraid to put down. The Cook was called next and brought her enormous pepper grinder. The whole court began sneezing. Through it all, Alice noticed she had been growing steadily larger — and was feeling considerably less frightened.",
+          "illustrationPrompt": "The Mad Hatter standing nervously in a witness box still clutching his teacup and top hat, the court erupting in sneezing from the Cook's pepper grinder nearby, a young curious girl in a blue dress and white pinafore in the gallery watching with growing confidence, King and Queen of Hearts on the throne, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mad hatter",
+            "the cook",
+            "king of hearts",
+            "queen of hearts"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_bre638fvi",
+          "pageNumber": 23,
+          "storyText": "Alice was called to the witness box. She had grown so large now that she knocked over the jury box as she stood, scattering all the animals. The King tried to apply Rule 42 — the oldest rule in the book — which said very tall people must leave the court. Alice told him she was not going anywhere.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore standing tall and confident in a witness box, accidentally knocking over the jury box with startled animals tumbling out, King and Queen of Hearts looking flustered on their thrones, the whole court in disarray, dramatic grand courtroom light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "king of hearts",
+            "queen of hearts",
+            "white rabbit",
+            "bill the lizard"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        },
+        {
+          "id": "page_gi6vfb398",
+          "pageNumber": 24,
+          "storyText": "'Off with her head!' cried the Queen. 'You're nothing but a pack of cards!' said Alice — and she meant it. At once the whole pack rose into the air and came flying at her. She swatted them away — and woke up on the riverbank with her head in her sister's lap, the leaves rustling, the river murmuring, and Wonderland gone.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore arms raised triumphantly as a great storm of playing cards swirls around her in a royal courtroom, all the characters of Wonderland visible in the card storm, then — a second vignette — her waking peacefully on a sunny riverbank with a smile and leaves in her hair, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "queen of hearts",
+            "king of hearts",
+            "white rabbit",
+            "knave of hearts"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:05:03.097Z"
+        }
+      ],
+      "createdAt": "2026-07-10T07:05:03.097Z"
+    },
+    {
+      "id": "book_c19a8z8rw",
+      "title": "Alices Adventures In Wonderland",
+      "coverTitle": "Alices Adventures In Wonderland",
+      "templateId": "t1-alices-adventures-in-wonderland",
+      "libraryStoryId": "t1-alices-adventures-in-wonderland",
+      "style": "Storybook",
+      "childName": "Alice, Bill The Lizard, Caterpillar, Cheshire Cat, Dormouse, White Rabbit",
+      "pages": [
+        {
+          "id": "page_mrzgp3l9y",
+          "pageNumber": 1,
+          "storyText": "",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore sitting on a sunny riverbank beside an older girl reading a book, lush green meadow, a startled White Rabbit in a yellow checked waistcoat running past clutching a pocket watch, golden afternoon light, wildflowers, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "white rabbit"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_hf7xqhm1z",
+          "pageNumber": 2,
+          "storyText": "",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore falling gently down a wide dark rabbit hole, floating past wooden shelves holding jam jars, candles, antique maps and clocks fixed to the walls, dreamy weightless atmosphere, soft amber glow from above fading to deep blue below, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_q26rnj3vd",
+          "pageNumber": 3,
+          "storyText": "",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore kneeling on a tiled floor in a long corridor of locked wooden doors, holding a tiny golden key, peering through a small curtained door at a glimpse of a sunlit garden with flowers and fountains beyond, mysterious warm light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_mufz9jndj",
+          "pageNumber": 4,
+          "storyText": "Alice found a bottle on the table with a label that said DRINK ME. It tasted of cherry tart and pineapple and roast turkey — and she shrank very small indeed. Then a little cake labelled EAT ME made her shoot up so tall her head bumped the ceiling. Nothing in Wonderland, it seemed, ever stayed the right size.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore in two sizes shown side by side — tiny beside a tall table holding a glass bottle labelled DRINK ME on the left, and enormously tall with head near the ceiling on the right, whimsical scale contrast, soft glowing light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_qqz2xp75r",
+          "pageNumber": 5,
+          "storyText": "Alice had cried so many giant tears when she was tall that the whole hall had flooded into a shallow pool. Now tiny again, she found herself swimming alongside a Mouse, a Duck, a Dodo, a young Eaglet, and several other sodden creatures — all looking rather bedraggled and put out.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore swimming in a glittering shallow pool of water alongside a dignified mouse, a duck, a dodo bird, and various small animals, all looking surprised and waterlogged, golden light reflecting on the water, warm tiled walls, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "the mouse",
+            "the dodo"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_obiyiq62g",
+          "pageNumber": 6,
+          "storyText": "To get dry, the Dodo announced a Caucus Race. He marked out a course — a sort of circle — and everyone ran about as they pleased. When they stopped, he declared that everybody had won, and all must have prizes. Alice handed out comfits from her pocket, receiving her own thimble back as her prize.",
+          "illustrationPrompt": "A pompous dodo bird in a bow tie presiding over a circular running race, a young curious girl in a blue dress and white pinafore and a crowd of cheerful wet animals running in different directions in a bright meadow, confetti, comic joyful energy, warm afternoon light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "the dodo",
+            "the mouse"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_g4bbjcimy",
+          "pageNumber": 7,
+          "storyText": "The Mouse promised to tell Alice something very dry — his own history. He began in a long winding voice that seemed to curl around the room like his tail. But Alice kept thinking of Dinah the cat, and the Mouse grew very offended and swam away without another word.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore leaning forward attentively listening to a small dignified mouse standing on a smooth pebble, other wet animals seated around in a semicircle, the mouse's tail curling elegantly behind him, gentle riverside setting, soft light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "the mouse"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_adb4snus3",
+          "pageNumber": 8,
+          "storyText": "The White Rabbit had mistaken Alice for his housemaid and sent her into his little cottage to fetch his gloves. Inside she found a small bottle and drank from it — and grew and grew until she filled every room, her arms out of the windows and one foot up the chimney.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore grown absolutely enormous filling a tiny cosy cottage interior, arms poking out of windows, legs taking up the whole floor, looking bewildered and amused, floral wallpaper, teacups on shelves, warm cottage light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "white rabbit"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_g82gihon4",
+          "pageNumber": 9,
+          "storyText": "Outside, a great commotion. The White Rabbit and a crowd of animals tried everything to get Alice out — even sending a small lizard called Bill down the chimney. They threw pebbles through the window that turned into little cakes when they hit the floor. Alice ate one, shrank at once, and ran out into the woods.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore newly shrunk to small size dashing out of a cottage door into a sunlit garden, a crowd of animals including the White Rabbit and a startled lizard looking astonished outside, tiny cakes and pebbles scattered on the ground, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "white rabbit",
+            "bill the lizard"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_034f0d9c8",
+          "pageNumber": 10,
+          "storyText": "In a quiet part of the forest, Alice came upon a large mushroom — and on top of it sat a large blue Caterpillar, smoking a long hookah pipe with great languid authority. He stared at her without a greeting. Then, very slowly, he asked: 'Who are you?'",
+          "illustrationPrompt": "A large plump blue caterpillar perched atop a giant mushroom smoking a hookah, blowing smoke rings that form question marks and letters, a young curious girl in a blue dress and white pinafore standing below looking up curiously, dappled forest light, ferns and mushrooms around, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "caterpillar"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_ba3lu3skb",
+          "pageNumber": 11,
+          "storyText": "The Caterpillar told Alice that one side of the mushroom would make her grow taller and the other would make her smaller. Then he crawled away without ceremony. Alice broke off a piece from each side and kept them carefully — at last she had some control over her own size.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore carefully breaking a piece from each side of an enormous mushroom in a quiet forest, the caterpillar visible crawling away in the background trailing smoke, dappled green light, sense of quiet discovery, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "caterpillar"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_yjlrqoq6j",
+          "pageNumber": 12,
+          "storyText": "Alice found a house with a Fish Footman at the door and a Frog Footman sitting on the step. Inside, the kitchen was full of pepper smoke and sneezing. The Cook stirred an enormous pot, the Duchess nursed a howling baby, and in the corner — grinning from ear to ear — sat the Cheshire Cat.",
+          "illustrationPrompt": "A chaotic Victorian kitchen full of pepper smoke, a stout Duchess in a large bonnet holding a screaming baby, a cook stirring a huge bubbling pot, a young curious girl in a blue dress and white pinafore standing in the doorway looking alarmed, a wide grinning striped cat on a shelf, two footmen visible outside, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "duchess",
+            "the cook",
+            "cheshire cat",
+            "frog footman",
+            "fish footman"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_97om0cfs8",
+          "pageNumber": 13,
+          "storyText": "The Duchess thrust the baby into Alice's arms and rushed off. As Alice carried it into the open air, the baby began to grunt. She looked down — it had an unmistakably turned-up nose. By the time she set it down it was quite definitely a pig, and it trotted off into the forest quite happily.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore standing in a garden path looking down with wide eyes at a small chubby pig trotting away into the trees, a trail of tiny hoofprints in the soft earth, dappled forest light, flowers and hedges around, gentle comic wonder, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_ofub3yqq1",
+          "pageNumber": 14,
+          "storyText": "The Cheshire Cat appeared in a large tree above the path, grinning enormously. He told Alice that the Mad Hatter lived one way, and the March Hare the other — and that both were mad, but that was rather the rule in Wonderland. Then he faded away very gradually until nothing was left but his enormous smile, hanging in the air.",
+          "illustrationPrompt": "A striped cat's enormous grin floating in the branches of a twilight tree, the cat's body gradually fading to invisibility, a young curious girl in a blue dress and white pinafore below on the path looking up at the floating smile with curiosity, warm purple and amber evening light through the trees, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "cheshire cat"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_l3rfnt6mt",
+          "pageNumber": 15,
+          "storyText": "Alice arrived at a long table set under a great tree in the garden. The Mad Hatter and the March Hare had their elbows on a sleeping Dormouse between them. There were cups and teapots everywhere. 'No room! No room!' they cried, though there was plenty of room. Alice sat down anyway.",
+          "illustrationPrompt": "A long garden tea table under a large tree covered in mismatched teacups and steaming teapots, the Mad Hatter in a tall green top hat and the March Hare sitting either side of a tiny sleeping mouse, a young curious girl in a blue dress and white pinafore pulling out a chair at the end, afternoon light through leaves, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mad hatter",
+            "march hare",
+            "dormouse"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_kqiwy65hy",
+          "pageNumber": 16,
+          "storyText": "The Mad Hatter asked Alice a riddle — why is a raven like a writing desk? — and then admitted he had absolutely no idea of the answer. He took out his pocket watch, complained it showed the wrong day, and tried dipping it in his tea to fix it. The March Hare suggested butter would have worked better.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore looking puzzled across the tea table at the Mad Hatter holding up a pocket watch with a baffled expression, the March Hare pouring tea wildly, the Dormouse asleep between them with a teacup balanced on his head, garden party chaos, warm dappled light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mad hatter",
+            "march hare",
+            "dormouse"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_unwt6yeba",
+          "pageNumber": 17,
+          "storyText": "In the royal garden, Alice came upon three card soldiers frantically painting white roses red with large brushes. They whispered that they had planted the wrong color by mistake and the Queen would have their heads if she found out. Alice helped hide them just as the royal procession arrived.",
+          "illustrationPrompt": "Three flat playing-card soldiers on ladders painting white roses red in a formal garden, paint dripping, a young curious girl in a blue dress and white pinafore watching with wide eyes, red and white rose bushes everywhere, distant sound of trumpets, royal banners in the far background, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "knave of hearts"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_1zl0hp8h9",
+          "pageNumber": 18,
+          "storyText": "Alice was given a flamingo as a mallet and a hedgehog as a ball. Every time she got the flamingo into position it twisted around to look at her. Every time she aimed the hedgehog it uncurled and walked away. The Queen of Hearts roamed the ground shouting 'Off with their heads!' at nearly everyone.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore trying to play croquet using a pink flamingo as a mallet, the flamingo turning to look at her quizzically, a hedgehog ball uncurling and wandering off, the Queen of Hearts pointing imperiously in the background, chaotic royal garden, bright afternoon, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "queen of hearts",
+            "king of hearts",
+            "cheshire cat"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_qhwhfe555",
+          "pageNumber": 19,
+          "storyText": "The Queen sent Alice with a loud Gryphon to hear the Mock Turtle's story. They found him sitting on a lonely rock, weeping enormous slow tears. He told them about his school under the sea where the master was an old turtle — they called him Tortoise because he taught them — and the subjects included reeling and writhing.",
+          "illustrationPrompt": "A weeping turtle with a calf's head sitting on a sea rock shedding large tears, a proud Gryphon standing beside him, a young curious girl in a blue dress and white pinafore seated on the pebbled shore listening with sympathetic attention, misty grey-blue ocean stretching behind them, soft melancholy light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mock turtle",
+            "the gryphon"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_63kj9se4b",
+          "pageNumber": 20,
+          "storyText": "The Mock Turtle and the Gryphon stood up and demonstrated the Lobster Quadrille — a grand dance where you advance two by two with lobsters as partners, throw them out to sea, swim after them, turn a somersault and come back. Alice thought it sounded rather wonderful and tried to imagine it.",
+          "illustrationPrompt": "The Mock Turtle and the Gryphon dancing an elaborate sea-dance on a beach at sunset, lobsters leaping joyfully into ocean waves in the background, a young curious girl in a blue dress and white pinafore watching with delight from the shore, warm amber and pink sunset light on the water, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mock turtle",
+            "the gryphon"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_4jon7ejoi",
+          "pageNumber": 21,
+          "storyText": "Back at the court, the King of Hearts sat on a throne wearing his crown and a long wig. The White Rabbit acted as herald and read out the charge in a clear loud voice. The Knave of Hearts was accused of stealing the Queen's tarts. A jury of twelve animals — including Bill the Lizard — sat in a wooden box with small slates.",
+          "illustrationPrompt": "A grand royal courtroom scene, the King of Hearts seated on a tall throne wearing a wig and crown, the White Rabbit standing as herald reading from a scroll, a jury box of animals with small slates, the Knave of Hearts standing accused, a young curious girl in a blue dress and white pinafore in the gallery watching, royal banners, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "king of hearts",
+            "queen of hearts",
+            "white rabbit",
+            "knave of hearts",
+            "bill the lizard"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_l4f5uoarl",
+          "pageNumber": 22,
+          "storyText": "The Mad Hatter was called as a witness and arrived still holding his teacup, which he was afraid to put down. The Cook was called next and brought her enormous pepper grinder. The whole court began sneezing. Through it all, Alice noticed she had been growing steadily larger — and was feeling considerably less frightened.",
+          "illustrationPrompt": "The Mad Hatter standing nervously in a witness box still clutching his teacup and top hat, the court erupting in sneezing from the Cook's pepper grinder nearby, a young curious girl in a blue dress and white pinafore in the gallery watching with growing confidence, King and Queen of Hearts on the throne, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "mad hatter",
+            "the cook",
+            "king of hearts",
+            "queen of hearts"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_mqxp2wbo6",
+          "pageNumber": 23,
+          "storyText": "Alice was called to the witness box. She had grown so large now that she knocked over the jury box as she stood, scattering all the animals. The King tried to apply Rule 42 — the oldest rule in the book — which said very tall people must leave the court. Alice told him she was not going anywhere.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore standing tall and confident in a witness box, accidentally knocking over the jury box with startled animals tumbling out, King and Queen of Hearts looking flustered on their thrones, the whole court in disarray, dramatic grand courtroom light, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "king of hearts",
+            "queen of hearts",
+            "white rabbit",
+            "bill the lizard"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        },
+        {
+          "id": "page_aozm1oc11",
+          "pageNumber": 24,
+          "storyText": "'Off with her head!' cried the Queen. 'You're nothing but a pack of cards!' said Alice — and she meant it. At once the whole pack rose into the air and came flying at her. She swatted them away — and woke up on the riverbank with her head in her sister's lap, the leaves rustling, the river murmuring, and Wonderland gone.",
+          "illustrationPrompt": "a young curious girl in a blue dress and white pinafore arms raised triumphantly as a great storm of playing cards swirls around her in a royal courtroom, all the characters of Wonderland visible in the card storm, then — a second vignette — her waking peacefully on a sunny riverbank with a smile and leaves in her hair, watercolor storybook illustration, soft pastel palette, delicate ink linework, vintage children's book",
+          "characterKeys": [
+            "alice",
+            "queen of hearts",
+            "king of hearts",
+            "white rabbit",
+            "knave of hearts"
+          ],
+          "imageStatus": "Queued",
+          "createdAt": "2026-07-10T07:09:21.755Z"
+        }
+      ],
+      "createdAt": "2026-07-10T07:09:21.756Z"
     }
   ],
   "jobs": [
