@@ -96,7 +96,7 @@ export class BookController {
    */
   public createBookFromLibrary = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { libraryStoryId } = req.body;
+      const { libraryStoryId, characterId, childName } = req.body;
       if (!libraryStoryId) {
         res.status(400).json({ error: "Field 'libraryStoryId' is required." });
         return;
@@ -120,14 +120,20 @@ export class BookController {
 
       const castNames = story.characters.map((c) => c.displayName).join(", ");
 
+      // Hero personalization (optional): when a characterId + childName are supplied, the
+      // uploaded user stars as the story's MAIN_CHARACTER hero. Their photo/sheet conditions
+      // the illustrations and their name fills the narrative. Left blank => generic stock book.
+      const heroName = typeof childName === "string" ? childName.trim() : "";
+
       const book: Book = {
         id: "book_" + Math.random().toString(36).substring(2, 11),
         title: story.title,
         coverTitle: story.title,
+        characterId: characterId || undefined,
         templateId: story.id,
         libraryStoryId: story.id,
         style: IllustrationStyle.STORYBOOK,
-        childName: castNames || story.title,
+        childName: heroName || castNames || story.title,
         pages,
         createdAt: new Date().toISOString()
       };

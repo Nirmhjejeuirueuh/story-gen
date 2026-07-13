@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard,
@@ -106,6 +106,38 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [charSheetJobId, storyJobId, activeBook?.id]);
+
+  // Adaptive fast polling: while the active book still has illustrations queued or
+  // generating, refresh it every 1.5s so page statuses (Queued → Drawing → Ready)
+  // update live. Stops automatically once every page has finished rendering.
+  const activeBookHasPendingPages = !!activeBook?.pages?.some(
+    (p) => p.imageStatus === "Queued" || p.imageStatus === "Generating"
+  );
+  useEffect(() => {
+    if (!activeBook?.id || !activeBookHasPendingPages) return;
+    const fastInterval = setInterval(() => {
+      refreshActiveBook();
+      fetchJobs();
+    }, 1500);
+    return () => clearInterval(fastInterval);
+  }, [activeBook?.id, activeBookHasPendingPages]);
+
+  // Auto-start batch illustration rendering when the wizard lands on Step 6.
+  // Pages are created with imageStatus "Queued", but no image job actually exists until
+  // POST /api/books/:id/generate is called — previously only the manual "Draw" button did
+  // that, so the pipeline sat at 0% until the user clicked it. Fire it automatically exactly
+  // once per book (guarded by a ref) when every page is still untouched ("Queued", no image).
+  const autoStartedBookIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (wizardStep !== 6 || activeTab !== "wizard" || !activeBook?.id) return;
+    if (autoStartedBookIdsRef.current.has(activeBook.id)) return;
+    const pages = activeBook.pages || [];
+    const allUntouched = pages.length > 0 && pages.every((p) => p.imageStatus === "Queued" && !p.imageUrl);
+    if (allUntouched) {
+      autoStartedBookIdsRef.current.add(activeBook.id);
+      handleBatchDrawIllustrations();
+    }
+  }, [wizardStep, activeTab, activeBook?.id, activeBook?.pages]);
 
   // --- API QUERIES ---
 
@@ -243,24 +275,33 @@ export default function App() {
     }
   };
 
-  // Create a book directly from a fixed-cast Story Library entry (bypasses personalization entirely)
+  // Create a book from a Story Library entry. Optionally stars an uploaded character as the
+  // MAIN_CHARACTER hero (personalized illustrations + name); otherwise uses the story's cast.
   const [isCreatingFromLibrary, setIsCreatingFromLibrary] = useState(false);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [libraryHeroCharacterId, setLibraryHeroCharacterId] = useState<string>("");
+  const [libraryHeroName, setLibraryHeroName] = useState<string>("");
   const handleCreateFromLibrary = async (libraryStoryId: string) => {
     setIsCreatingFromLibrary(true);
     setLibraryError(null);
     try {
+      const hero = characters.find((c) => c.id === libraryHeroCharacterId) || null;
+      const heroName = libraryHeroName.trim() || hero?.name || "";
       const res = await fetch("/api/books/from-library", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ libraryStoryId }),
+        body: JSON.stringify({
+          libraryStoryId,
+          characterId: hero?.id || undefined,
+          childName: heroName || undefined,
+        }),
       });
       const contentType = res.headers.get("content-type");
       const data = (contentType && contentType.includes("application/json")) ? await res.json() : null;
       if (!res.ok || !data) throw new Error(data?.error || "Failed to create storybook from library.");
 
       setActiveBook(data.book);
-      setCreatedCharacter(null);
+      setCreatedCharacter(hero);
       fetchBooks();
       setWizardStep(6); // Straight to illustration rendering
       setActiveTab("wizard");
@@ -1314,6 +1355,59 @@ export default function App() {
                   <button onClick={() => setLibraryError(null)} className="ml-auto font-bold">✕</button>
                 </div>
               )}
+
+              {/* Optional hero personalization applied to any story created below */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                <div>
+                  <h4 className="font-bold text-slate-800 text-base flex items-center gap-1.5">
+                    <Sparkles className="h-5 w-5 text-emerald-600" /> Personalize the hero (optional)
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Star an uploaded character as the <strong>MAIN_CHARACTER</strong> hero of any story below — their photo shapes the illustrations and their name fills the text. Leave blank for the generic version with the story&apos;s own cast.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Hero Character</label>
+                    <select
+                      value={libraryHeroCharacterId}
+                      onChange={(e) => {
+                        setLibraryHeroCharacterId(e.target.value);
+                        const c = characters.find((ch) => ch.id === e.target.value);
+                        if (c && !libraryHeroName.trim()) setLibraryHeroName(c.name);
+                      }}
+                      className="w-full text-sm p-3 border border-slate-200 rounded-xl bg-slate-50 font-semibold"
+                    >
+                      <option value="">— None (use the story&apos;s own cast) —</option>
+                      {characters.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.age} y/o {c.gender}){c.characterSheetId ? " • sheet ready" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {characters.length === 0 && (
+                      <p className="text-[11px] text-slate-400">No characters yet — create one in the Story Wizard (upload a photo) to personalize.</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Hero Name (shown in the story text)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Liam"
+                      value={libraryHeroName}
+                      onChange={(e) => setLibraryHeroName(e.target.value)}
+                      className="w-full text-sm p-3 border border-slate-200 rounded-xl bg-slate-50 font-semibold"
+                    />
+                  </div>
+                </div>
+                {libraryHeroCharacterId && (
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span>Stories created below will star {libraryHeroName.trim() || "this character"} as the hero.</span>
+                  </div>
+                )}
+              </div>
+
               <StoryLibraryBrowser onCreate={handleCreateFromLibrary} isCreating={isCreatingFromLibrary} />
             </motion.div>
           )}

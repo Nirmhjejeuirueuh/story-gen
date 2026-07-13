@@ -5,6 +5,7 @@
 
 import React, { useState } from "react";
 import { Book } from "../types.js";
+import { personalizeStoryText } from "../utils/personalize.js";
 import { BookOpen, Grid, ChevronLeft, ChevronRight, Sparkles, Image as ImageIcon } from "lucide-react";
 
 interface BookPreviewProps {
@@ -142,7 +143,7 @@ export default function BookPreview({ book }: BookPreviewProps) {
                         <>
                           <div className="flex-1 p-6 md:p-8 flex items-center justify-center">
                             <p className="text-slate-700 font-medium text-sm md:text-base leading-relaxed text-center">
-                              {page.storyText}
+                              {personalizeStoryText(page.storyText, book.childName)}
                             </p>
                           </div>
                           <div className="p-3 bg-white text-center border-t border-slate-100 text-xs font-bold text-slate-400">
@@ -223,7 +224,7 @@ export default function BookPreview({ book }: BookPreviewProps) {
               </div>
               <div className="p-3 bg-slate-50/50 border-t border-slate-100">
                 <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed text-center">
-                  {p.storyText}
+                  {personalizeStoryText(p.storyText, book.childName)}
                 </p>
               </div>
             </div>

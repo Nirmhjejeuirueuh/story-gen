@@ -17,14 +17,63 @@ export class QueueService {
   private activeJobsCount = 0;
   private readonly maxConcurrency = 2; // Process 2 jobs concurrently
   private isProcessing = false;
+  // Hard ceiling on a single job attempt. Provider calls (esp. reference-conditioned image
+  // generation) can occasionally hang indefinitely with no network timeout; without this a
+  // hung job would never release its concurrency slot and, with only maxConcurrency slots,
+  // two hangs freeze the entire pipeline. On timeout the attempt throws and is retried.
+  private static readonly JOB_ATTEMPT_TIMEOUT_MS = 120000; // 2 minutes
 
   constructor(
     private jobRepo: JobRepository,
     private characterRepo: CharacterRepository,
     private bookRepo: BookRepository
   ) {
-    // Start background processor loop
+    // Recover jobs left mid-flight by a previous run (hung provider call / server restart),
+    // then start the background processor loop.
+    this.recoverOrphanedJobs();
     setInterval(() => this.processQueue(), 2000);
+  }
+
+  /**
+   * Rejects if the given promise does not settle within `ms`. Used to bound each job attempt
+   * so a hung provider call cannot permanently occupy a concurrency slot.
+   */
+  private withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`${label} timed out after ${ms}ms`)),
+        ms
+      );
+      promise.then(
+        (val) => { clearTimeout(timer); resolve(val); },
+        (err) => { clearTimeout(timer); reject(err); }
+      );
+    });
+  }
+
+  /**
+   * On startup the in-memory concurrency counter resets to 0, but the persisted DB may still
+   * hold jobs stuck in "Generating" from a previous run (a hung provider call, or a restart
+   * mid-render). Those would otherwise sit forever and their pages would show "Generating"
+   * with no worker behind them. Re-queue them so the processor picks them up again, and reset
+   * any half-rendered pages back to "Queued".
+   */
+  private async recoverOrphanedJobs() {
+    try {
+      const all = await this.jobRepo.findAll();
+      const orphaned = all.filter((j) => j.status === "Generating");
+      for (const j of orphaned) {
+        await this.jobRepo.update(j.id, { status: "Queued", progress: 0 });
+        if (j.type === JobType.IMAGE && j.payload?.bookId && j.payload?.pageNumber) {
+          await this.bookRepo.updatePage(j.payload.bookId, j.payload.pageNumber, { imageStatus: "Queued" });
+        }
+      }
+      if (orphaned.length) {
+        console.log(`[QueueService] Re-queued ${orphaned.length} orphaned job(s) from a previous run.`);
+      }
+    } catch (error) {
+      console.error("[QueueService] Failed to recover orphaned jobs:", error);
+    }
   }
 
   /**
@@ -92,14 +141,16 @@ export class QueueService {
     while (attempts < maxAttempts) {
       try {
         attempts++;
+        const timeout = QueueService.JOB_ATTEMPT_TIMEOUT_MS;
+        const label = `Job ${job.id} (${job.type})`;
         if (job.type === JobType.CHARACTER_SHEET) {
-          await this.executeCharacterSheetJob(job);
+          await this.withTimeout(this.executeCharacterSheetJob(job), timeout, label);
         } else if (job.type === JobType.STORY) {
-          await this.executeStoryJob(job);
+          await this.withTimeout(this.executeStoryJob(job), timeout, label);
         } else if (job.type === JobType.IMAGE) {
-          await this.executeImageJob(job);
+          await this.withTimeout(this.executeImageJob(job), timeout, label);
         } else if (job.type === JobType.PDF) {
-          await this.executePDFJob(job);
+          await this.withTimeout(this.executePDFJob(job), timeout, label);
         }
 
         console.log(`[QueueService] Job completed successfully: ${job.id}`);
@@ -271,35 +322,79 @@ export class QueueService {
     let imageUrl: string;
 
     if (book.libraryStoryId) {
-      // Fixed-cast Story Library book: use the hand-authored prompt verbatim, conditioned
-      // on the referenced characters' reference sheet images for visual consistency.
+      // Fixed-cast Story Library book: use the hand-authored prompt, conditioned on the
+      // referenced characters' reference sheet images for visual consistency.
       const referenceImages = (page.characterKeys || [])
         .map((key) => storyLibraryService.getCharacterImageBase64(book.libraryStoryId!, key))
         .filter((ref): ref is { mime: string; data: string } => !!ref);
 
+      // Hero personalization: if this library book stars an uploaded character, prepend
+      // their reference sheet + photos so the MAIN_CHARACTER hero looks like the real user,
+      // and substitute their name into the illustration prompt.
+      let scenePrompt = page.illustrationPrompt;
+      if (book.characterId) {
+        const hero = await this.characterRepo.findById(book.characterId);
+        if (hero) {
+          const heroRefs: { mime: string; data: string }[] = [];
+          if (hero.characterSheetId) {
+            const sheet = await this.characterRepo.findSheetById(hero.characterSheetId);
+            const ref = sheet?.sheetImage ? this.dataUriToReference(sheet.sheetImage) : null;
+            if (ref) heroRefs.push(ref);
+          }
+          for (const photo of (hero.photos || []).slice(0, 3)) {
+            const ref = this.dataUriToReference(photo);
+            if (ref) heroRefs.push(ref);
+          }
+          // Hero references go first so the protagonist's likeness is prioritized.
+          referenceImages.unshift(...heroRefs);
+        }
+        scenePrompt = scenePrompt.replace(/MAIN_CHARACTER/g, book.childName);
+      }
+
       await this.jobRepo.update(job.id, { progress: 50 });
 
       imageUrl = imageProvider === "openai"
-        ? await openaiProvider.generateImageWithReferences(page.illustrationPrompt, referenceImages)
+        ? await openaiProvider.generateImageWithReferences(scenePrompt, referenceImages)
         : (imageProvider === "procedural"
-            ? geminiProvider.createProceduralIllustration(page.illustrationPrompt, book.style)
-            : await geminiProvider.generateImageWithReferences(page.illustrationPrompt, referenceImages, book.style));
+            ? geminiProvider.createProceduralIllustration(scenePrompt, book.style)
+            : await geminiProvider.generateImageWithReferences(scenePrompt, referenceImages, book.style));
 
-      // Cache the render to the story template's own illustrations folder on disk so it
-      // can be reused/inspected from the Story Library browser without regenerating.
-      storyLibraryService.saveIllustration(book.libraryStoryId, pageNumber, imageUrl);
+      // Cache to the story template's shared illustrations folder ONLY for generic (non-
+      // personalized) books, so a user's hero renders never overwrite the stock artwork.
+      if (!book.characterId) {
+        storyLibraryService.saveIllustration(book.libraryStoryId, pageNumber, imageUrl);
+      }
     } else {
       const char = await this.characterRepo.findById(book.characterId!);
       if (!char) throw new Error(`Character ${book.characterId} not found.`);
 
-      // Fetch character sheet details for consistency context
-      let sheetDetails = "Use a friendly cartoon styling with distinct features.";
+      // Collect reference images so the child's real appearance conditions every page.
+      // Priority order: the approved character reference sheet (the consistent "model"),
+      // followed by a few uploaded portraits for facial likeness. These are passed as
+      // real image references to the provider, not just described in text.
+      const referenceImages: { mime: string; data: string }[] = [];
+      let hasSheet = false;
       if (char.characterSheetId) {
         const sheet = await this.characterRepo.findSheetById(char.characterSheetId);
-        if (sheet) {
-          sheetDetails = "An approved character reference sheet is on file (three-view drawing, expression sheet, pose sheet, and costume design). Ensure hairstyle, clothes color palette, and face proportions match it exactly.";
+        if (sheet?.sheetImage) {
+          const ref = this.dataUriToReference(sheet.sheetImage);
+          if (ref) {
+            referenceImages.push(ref);
+            hasSheet = true;
+          }
         }
       }
+      // Cap uploaded photos to keep the request lean and inexpensive.
+      for (const photo of (char.photos || []).slice(0, 3)) {
+        const ref = this.dataUriToReference(photo);
+        if (ref) referenceImages.push(ref);
+      }
+
+      const sheetDetails = hasSheet
+        ? "An approved character reference sheet is provided as an IMAGE reference (three-view drawing, expression sheet, pose sheet, costume design). Match the hairstyle, clothing colour palette, and facial proportions to it exactly."
+        : (referenceImages.length > 0
+            ? "Reference photos of the real child are provided as IMAGE references. Faithfully preserve the child's facial likeness, hair, and skin tone while re-drawing them in the requested illustration style."
+            : "Use a friendly cartoon styling with distinct features.");
 
       const imagePrompt = promptEngine.generateIllustrationPrompt(
         pageNumber,
@@ -312,11 +407,13 @@ export class QueueService {
 
       await this.jobRepo.update(job.id, { progress: 50 });
 
+      // Reference-conditioned generation. Both providers gracefully fall back to plain
+      // text-to-image when no usable references are supplied.
       imageUrl = imageProvider === "openai"
-        ? await openaiProvider.generateImage(imagePrompt, book.style)
+        ? await openaiProvider.generateImageWithReferences(imagePrompt, referenceImages)
         : (imageProvider === "procedural"
             ? geminiProvider.createProceduralIllustration(imagePrompt, book.style)
-            : await geminiProvider.generateImage(imagePrompt, book.style));
+            : await geminiProvider.generateImageWithReferences(imagePrompt, referenceImages, book.style));
     }
 
     await this.bookRepo.updatePage(bookId, pageNumber, {
@@ -329,6 +426,20 @@ export class QueueService {
       progress: 100,
       result: { bookId, pageNumber, imageUrl: imageUrl.slice(0, 100) + "..." }
     });
+  }
+
+  /**
+   * Parses a base64 data URI ("data:image/png;base64,....") into the { mime, data }
+   * shape expected by the providers' reference-conditioned image generation.
+   * Returns null for non-data URIs (e.g. remote URLs) or SVG procedural placeholders,
+   * which are not useful visual references.
+   */
+  private dataUriToReference(dataUri: string): { mime: string; data: string } | null {
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUri || "");
+    if (!match) return null;
+    const [, mime, data] = match;
+    if (mime === "image/svg+xml") return null;
+    return { mime, data };
   }
 
   /**
