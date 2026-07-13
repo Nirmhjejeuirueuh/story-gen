@@ -6,6 +6,7 @@
 import { Request, Response } from "express";
 import { CharacterRepository } from "../repositories/CharacterRepository.js";
 import { QueueService } from "../services/QueueService.js";
+import { storageService } from "../services/StorageService.js";
 import { JobType, Character } from "../../src/types.js";
 
 export class CharacterController {
@@ -35,13 +36,23 @@ export class CharacterController {
         additionalNotes
       } = req.body;
 
+      const charId = "char_" + Math.random().toString(36).substring(2, 11);
+
+      // Upload reference photos to GCS and store their URLs instead of inline base64. Keeps
+      // the DB small and puts every image in the cloud. resolveReference downloads these URLs
+      // when they're used as generation references, so personalization is unaffected.
+      const uploadedPhotos: string[] = [];
+      for (let i = 0; i < (photos || []).length; i++) {
+        uploadedPhotos.push(await storageService.uploadDataUri(photos[i], `photos/${charId}/${i}-${Date.now()}`));
+      }
+
       const character: Character = {
-        id: "char_" + Math.random().toString(36).substring(2, 11),
+        id: charId,
         name,
         age,
         gender,
         description: description || "A happy, smiling little adventurer.",
-        photos: photos || [],
+        photos: uploadedPhotos,
         hairColor,
         hairStyle,
         eyeColor,
