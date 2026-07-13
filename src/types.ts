@@ -94,6 +94,7 @@ export interface StoryLibraryEntry {
   id: string;
   title: string;
   numberOfPages: number;
+  tags: string[]; // theme/genre labels shown as chips on the library card (from tags.txt)
   characters: StoryLibraryCharacter[];
   chapters: StoryLibraryChapter[];
 }

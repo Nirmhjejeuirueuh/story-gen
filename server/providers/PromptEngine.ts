@@ -4,13 +4,17 @@
  */
 
 import { IllustrationStyle } from "../../src/types.js";
+import { HOUSE_STYLE } from "../config/config.js";
 
 export class PromptEngine {
   /**
    * Generates a prompt for creating an official children's storybook character sheet.
+   * Rendered in the shared HOUSE_STYLE so the hero's reference matches the story pages
+   * (a sheet drawn in a different style is a major cause of the hero "drifting" between
+   * the approved sheet and the rendered illustrations).
    */
   public generateCharacterPrompt(name: string, age: number, gender: string, description: string): string {
-    return `Create a comprehensive character design reference sheet for a ${age}-year-old ${gender} named "${name}", in the style of a professional animation/game character model sheet, on a single clean neutral background.
+    return `Create a comprehensive character design reference sheet for a ${age}-year-old ${gender} named "${name}", rendered in this exact art style: ${HOUSE_STYLE}. Use a single clean neutral background.
 Character description and personality: ${description}
 
 The sheet must be a single image laid out in clearly labeled sections, all showing the exact same character with perfectly consistent face, hairstyle, hair color, eye color, skin tone, and clothing/costume colors throughout every section:
@@ -22,7 +26,7 @@ The sheet must be a single image laid out in clearly labeled sections, all showi
 5. POSE SHEET: A sequence of at least 4 labeled dynamic action poses relevant to the character's personality and story role, shown as clean line-art or lightly colored sketches with numbered steps.
 6. COSTUME DESIGN & DETAILS: Close-up callouts of the character's outfit pieces and accessories with small detail insets (zippers, patterns, badges, or props) and labels for each garment/accessory.
 
-Style constraints: Clean, highly polished, professional character-design-sheet style with defined outlines, vibrant but harmonious colors, clear section labels/headers in a legible font, and a well-organized grid layout (similar to official animation studio model sheets). Keep the character simple and charming enough to be easily replicated consistently across a children's storybook.`;
+Style constraints: Render every section in the house art style above (${HOUSE_STYLE}) with clear labeled sections and a well-organized grid layout. Keep the character simple, charming, and easy to reproduce consistently across a children's storybook.`;
   }
 
   /**

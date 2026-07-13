@@ -14,6 +14,7 @@ import { JobRepository } from "../repositories/JobRepository.js";
 import { QueueService } from "../services/QueueService.js";
 import { RequestValidator } from "../validators/validation.js";
 import { db } from "../database/db.js";
+import { storageService } from "../services/StorageService.js";
 
 const router = Router();
 
@@ -32,6 +33,18 @@ const bookController = new BookController(bookRepo, jobRepo, queueService);
 const storyLibraryController = new StoryLibraryController();
 
 // --- REST ENDPOINTS MAP ---
+
+// Image proxy — streams private GCS objects (illustrations, character sheets) to the browser.
+// Stored image URLs look like /api/images/illustrations/<bookId>/<page>.png; this keeps the
+// bucket private while letting <img src> load them directly.
+router.get("/images/*", async (req: Request, res: Response) => {
+  try {
+    const objectPath = (req.params as unknown as string[])[0];
+    await storageService.streamTo(objectPath, res);
+  } catch (error: any) {
+    if (!res.headersSent) res.status(500).json({ error: "Failed to load image: " + error.message });
+  }
+});
 
 // File Uploads
 router.post("/upload", RequestValidator.validateUpload, (req, res) => uploadController.uploadPhotos(req, res));

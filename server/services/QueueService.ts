@@ -11,6 +11,7 @@ import { promptEngine } from "../providers/PromptEngine.js";
 import { geminiProvider } from "../providers/GeminiProvider.js";
 import { openaiProvider } from "../providers/OpenAIProvider.js";
 import { storyLibraryService } from "./StoryLibraryService.js";
+import { storageService } from "./StorageService.js";
 import { db } from "../database/db.js";
 
 export class QueueService {
@@ -224,11 +225,15 @@ export class QueueService {
     
     // Call configured provider to generate the comprehensive reference sheet
     const imageProvider = db.settings?.imageProvider || "gemini";
-    const sheetImage = imageProvider === "openai"
+    const rawSheetImage = imageProvider === "openai"
       ? await openaiProvider.generateCharacterSheet(prompt)
       : await geminiProvider.generateCharacterSheet(prompt);
 
     await this.jobRepo.update(job.id, { progress: 80 });
+
+    // Offload the generated sheet to GCS (returns a /api/images/... URL); falls back to the
+    // inline data URI if storage is disabled or the upload fails.
+    const sheetImage = await storageService.uploadDataUri(rawSheetImage, `sheets/${characterId}-${Date.now()}`);
 
     const sheet = await this.characterRepo.createSheet({
       id: "sheet_" + Math.random().toString(36).substring(2, 11),
@@ -324,9 +329,9 @@ export class QueueService {
     if (book.libraryStoryId) {
       // Fixed-cast Story Library book: use the hand-authored prompt, conditioned on the
       // referenced characters' reference sheet images for visual consistency.
-      const referenceImages = (page.characterKeys || [])
-        .map((key) => storyLibraryService.getCharacterImageBase64(book.libraryStoryId!, key))
-        .filter((ref): ref is { mime: string; data: string } => !!ref);
+      const referenceImages = (await Promise.all(
+        (page.characterKeys || []).map((key) => storyLibraryService.getCharacterImageBase64(book.libraryStoryId!, key))
+      )).filter((ref): ref is { mime: string; data: string } => !!ref);
 
       // Hero personalization: if this library book stars an uploaded character, prepend
       // their reference sheet + photos so the MAIN_CHARACTER hero looks like the real user,
@@ -338,11 +343,11 @@ export class QueueService {
           const heroRefs: { mime: string; data: string }[] = [];
           if (hero.characterSheetId) {
             const sheet = await this.characterRepo.findSheetById(hero.characterSheetId);
-            const ref = sheet?.sheetImage ? this.dataUriToReference(sheet.sheetImage) : null;
+            const ref = sheet?.sheetImage ? await storageService.resolveReference(sheet.sheetImage) : null;
             if (ref) heroRefs.push(ref);
           }
           for (const photo of (hero.photos || []).slice(0, 3)) {
-            const ref = this.dataUriToReference(photo);
+            const ref = await storageService.resolveReference(photo);
             if (ref) heroRefs.push(ref);
           }
           // Hero references go first so the protagonist's likeness is prioritized.
@@ -377,7 +382,7 @@ export class QueueService {
       if (char.characterSheetId) {
         const sheet = await this.characterRepo.findSheetById(char.characterSheetId);
         if (sheet?.sheetImage) {
-          const ref = this.dataUriToReference(sheet.sheetImage);
+          const ref = await storageService.resolveReference(sheet.sheetImage);
           if (ref) {
             referenceImages.push(ref);
             hasSheet = true;
@@ -386,7 +391,7 @@ export class QueueService {
       }
       // Cap uploaded photos to keep the request lean and inexpensive.
       for (const photo of (char.photos || []).slice(0, 3)) {
-        const ref = this.dataUriToReference(photo);
+        const ref = await storageService.resolveReference(photo);
         if (ref) referenceImages.push(ref);
       }
 
@@ -416,6 +421,11 @@ export class QueueService {
             : await geminiProvider.generateImageWithReferences(imagePrompt, referenceImages, book.style));
     }
 
+    // Offload the rendered page image to GCS (returns a /api/images/... URL). Done after any
+    // stock-illustration caching above, which needs the raw data URI. Degrades to the inline
+    // data URI if storage is disabled or the upload fails.
+    imageUrl = await storageService.uploadDataUri(imageUrl, `illustrations/${bookId}/${pageNumber}-${Date.now()}`);
+
     await this.bookRepo.updatePage(bookId, pageNumber, {
       imageUrl,
       imageStatus: "Completed"
@@ -426,20 +436,6 @@ export class QueueService {
       progress: 100,
       result: { bookId, pageNumber, imageUrl: imageUrl.slice(0, 100) + "..." }
     });
-  }
-
-  /**
-   * Parses a base64 data URI ("data:image/png;base64,....") into the { mime, data }
-   * shape expected by the providers' reference-conditioned image generation.
-   * Returns null for non-data URIs (e.g. remote URLs) or SVG procedural placeholders,
-   * which are not useful visual references.
-   */
-  private dataUriToReference(dataUri: string): { mime: string; data: string } | null {
-    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUri || "");
-    if (!match) return null;
-    const [, mime, data] = match;
-    if (mime === "image/svg+xml") return null;
-    return { mime, data };
   }
 
   /**

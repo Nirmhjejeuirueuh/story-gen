@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from "react";
 import { StoryLibraryEntry } from "../types.js";
-import { Library, Sparkles, Users, Images, ChevronDown, ChevronUp, RefreshCw, ImageOff } from "lucide-react";
+import { Library, Sparkles, Users, Images, ChevronDown, ChevronUp, RefreshCw, ImageOff, Tag } from "lucide-react";
 
 interface StoryLibraryBrowserProps {
   onCreate: (libraryStoryId: string) => void;
@@ -95,6 +95,24 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
               <div className="p-5 space-y-3">
                 <h4 className="font-extrabold text-slate-800 text-base">{story.title}</h4>
                 <p className="text-xs text-slate-400 font-bold uppercase">{story.numberOfPages} pages</p>
+
+                {story.tags && story.tags.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <Tag className="h-3 w-3" /> Themes
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {story.tags.map((t) => (
+                        <span
+                          key={t}
+                          className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-1"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {story.characters.length > 0 && (
                   <div className="space-y-1.5">

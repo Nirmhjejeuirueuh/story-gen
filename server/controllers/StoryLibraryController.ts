@@ -5,6 +5,7 @@
 
 import { Request, Response } from "express";
 import { storyLibraryService } from "../services/StoryLibraryService.js";
+import { storageService } from "../services/StorageService.js";
 import { geminiProvider } from "../providers/GeminiProvider.js";
 import { openaiProvider } from "../providers/OpenAIProvider.js";
 import { db } from "../database/db.js";
@@ -48,6 +49,12 @@ export class StoryLibraryController {
   public getCharacterImage = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id, key } = req.params;
+      // Cloud-first: cast reference images live in GCS (casts/<id>/<key>.*).
+      const gcsPath = await storyLibraryService.getCharacterGcsPath(id, key);
+      if (gcsPath) {
+        await storageService.streamTo(gcsPath, res);
+        return;
+      }
       const filePath = storyLibraryService.getCharacterImagePath(id, key);
       if (!filePath) {
         res.status(404).json({ error: "Character reference image not found." });
@@ -99,9 +106,9 @@ export class StoryLibraryController {
         return;
       }
 
-      const referenceImages = chapter.characterKeys
-        .map((key) => storyLibraryService.getCharacterImageBase64(id, key))
-        .filter((ref): ref is { mime: string; data: string } => !!ref);
+      const referenceImages = (await Promise.all(
+        chapter.characterKeys.map((key) => storyLibraryService.getCharacterImageBase64(id, key))
+      )).filter((ref): ref is { mime: string; data: string } => !!ref);
 
       const style = (req.body?.style as IllustrationStyle) || IllustrationStyle.STORYBOOK;
       const imageProvider = db.settings?.imageProvider || "gemini";
