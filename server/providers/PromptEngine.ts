@@ -30,6 +30,25 @@ Style constraints: Render every section in the house art style above (${HOUSE_ST
   }
 
   /**
+   * Builds a full multi-view reference sheet prompt for a fixed-cast (Story Library) character,
+   * from its existing single-image description. Used on-demand for a richer DISPLAY sheet; the
+   * clean single reference image stays the actual generation reference for story pages.
+   */
+  public generateCastSheetPrompt(name: string, description: string): string {
+    return `Create a comprehensive character design reference sheet for the character "${name}", rendered in this exact art style: ${HOUSE_STYLE}. Use a single clean neutral white background, and keep the character perfectly consistent with the provided reference image.
+Character description: ${description}
+
+Lay out a single image in clearly labeled sections, all showing the exact same character with perfectly consistent face, colours, and costume throughout:
+1. TITLE HEADER: The character's name "${name}" at the top like a title card.
+2. THREE-VIEW DRAWING: Front view, side view, and back view in a neutral pose, labeled "FRONT VIEW", "SIDE VIEW", "BACK VIEW".
+3. EXPRESSION SHEET: A grid of at least 6 labeled facial expressions showing emotional range.
+4. POSE SHEET: At least 4 labeled dynamic action poses relevant to the character.
+5. DETAILS: Close-up callouts of the character's key features, outfit, or props with labels.
+
+Style constraints: render every section in the house art style above (${HOUSE_STYLE}), organized as a clean labeled grid.`;
+  }
+
+  /**
    * Generates a prompt for generating a structured story JSON.
    */
   public generateStoryPrompt(templateTitle: string, templatePrompt: string, style: IllustrationStyle, childName: string, numPages: number = 8): string {

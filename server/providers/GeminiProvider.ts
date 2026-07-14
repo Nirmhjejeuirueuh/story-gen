@@ -90,8 +90,13 @@ export class GeminiProvider {
       if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, attempt * 800));
     }
 
-    console.warn("Gemini returned no image after retries. Falling back to procedural design.");
-    return this.createProceduralIllustration(prompt, style);
+    // Do NOT silently substitute a procedural placeholder here: returning a valid data URI would
+    // make the caller (QueueService) treat the page as successfully "Completed", leaving an emoji-
+    // on-gradient placeholder that the user then has to notice and regenerate by hand. Throwing lets
+    // QueueService's own retry loop re-run the whole job, and — if it still fails — mark the page
+    // "Failed" so the UI surfaces a retry instead of a fake-complete placeholder. The procedural art
+    // is still available via the explicit imageProvider === "procedural" mode (called directly).
+    throw new Error("Gemini returned no image after retries.");
   }
 
   /**
@@ -142,8 +147,9 @@ export class GeminiProvider {
       if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, attempt * 800));
     }
 
-    console.warn("Gemini returned no reference-conditioned image after retries. Falling back to procedural design.");
-    return this.createProceduralIllustration(prompt, style);
+    // Throw rather than return a placeholder — see generateImage() above for the full rationale.
+    // A silent procedural fallback here is exactly what caused pages to finish as emoji placeholders.
+    throw new Error("Gemini returned no reference-conditioned image after retries.");
   }
 
   /**

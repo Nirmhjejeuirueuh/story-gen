@@ -119,6 +119,25 @@ export class StoryLibraryService {
   }
 
   /**
+   * Reads a cast character's reference-sheet prompt from charators/<key>.md, if one exists.
+   * This is the exact prompt used to generate that character's sheet. Returns null when the
+   * character is defined only by an image (e.g. Alice) with no accompanying .md.
+   */
+  public getCharacterDescription(storyId: string, key: string): string | null {
+    const storyDir = path.join(this.storiesRoot, storyId);
+    const charsDir = this.findSubdir(storyDir, CHARACTERS_DIR_NAMES);
+    if (!charsDir) return null;
+
+    const normalizedKey = key.trim().toLowerCase();
+    const files = fs.readdirSync(charsDir).filter((f) => /\.md$/i.test(f));
+    const match = files.find((f) => path.basename(f, path.extname(f)).trim().toLowerCase() === normalizedKey);
+    if (!match) return null;
+
+    const content = fs.readFileSync(path.join(charsDir, match), "utf-8").trim();
+    return content || null;
+  }
+
+  /**
    * Resolves the on-disk path to a chapter's cached illustration, if one has been generated
    */
   public getIllustrationPath(storyId: string, pageNumber: number): string | null {

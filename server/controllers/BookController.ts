@@ -8,7 +8,9 @@ import { BookRepository } from "../repositories/BookRepository.js";
 import { JobRepository } from "../repositories/JobRepository.js";
 import { QueueService } from "../services/QueueService.js";
 import { storyLibraryService } from "../services/StoryLibraryService.js";
+import { storyStore } from "../services/StoryStore.js";
 import { JobType, Book, BookPage, StoryTemplate, IllustrationStyle } from "../../src/types.js";
+import { AuthedRequest } from "../middleware/auth.js";
 
 export class BookController {
   constructor(
@@ -16,6 +18,15 @@ export class BookController {
     private jobRepo: JobRepository,
     private queueService: QueueService
   ) {}
+
+  /**
+   * Whether the caller may read/modify this book: the owner, or an admin for legacy books
+   * that predate per-user ownership (no ownerId). Admins do NOT get access to other users'
+   * owned books, keeping user libraries private.
+   */
+  private canAccessBook(book: Book, req: AuthedRequest): boolean {
+    return book.ownerId === req.uid || (!!req.isAdmin && !book.ownerId);
+  }
 
   /**
    * Creates a new book and queues background story outline generation
@@ -26,6 +37,7 @@ export class BookController {
 
       const book: Book = {
         id: "book_" + Math.random().toString(36).substring(2, 11),
+        ownerId: (req as AuthedRequest).uid,
         title: `${childName}'s Adventure`,
         coverTitle: "Personalized Storybook",
         characterId,
@@ -37,6 +49,7 @@ export class BookController {
       };
 
       const saved = await this.bookRepo.create(book);
+      await storyStore.syncBook(saved.id).catch(() => {}); // dual-write to stories/ (non-fatal)
       console.log(`[BookController] Book shell created: ${saved.id}. Queuing story generation...`);
 
       // Queue background job to generate story text and illustration prompts
@@ -66,7 +79,7 @@ export class BookController {
     try {
       const { id } = req.params;
       const book = await this.bookRepo.findById(id);
-      if (!book) {
+      if (!book || !this.canAccessBook(book, req as AuthedRequest)) {
         res.status(404).json({ error: "Book not found." });
         return;
       }
@@ -127,6 +140,7 @@ export class BookController {
 
       const book: Book = {
         id: "book_" + Math.random().toString(36).substring(2, 11),
+        ownerId: (req as AuthedRequest).uid,
         title: story.title,
         coverTitle: story.title,
         characterId: characterId || undefined,
@@ -139,6 +153,7 @@ export class BookController {
       };
 
       const saved = await this.bookRepo.create(book);
+      await storyStore.syncBook(saved.id).catch(() => {}); // dual-write to stories/ (non-fatal)
       console.log(`[BookController] Storybook created from library entry: ${saved.id} (${story.id})`);
 
       res.status(201).json({
@@ -156,7 +171,12 @@ export class BookController {
    */
   public getAllBooks = async (req: Request, res: Response): Promise<void> => {
     try {
-      const list = await this.bookRepo.findAll();
+      const auth = req as AuthedRequest;
+      // Read from the stories/ model (Slice 3c), falling back to BookRepository if its cache
+      // isn't populated yet.
+      const fromStories = storyStore.listBooks();
+      const all = fromStories.length > 0 ? fromStories : await this.bookRepo.findAll();
+      const list = all.filter((b) => this.canAccessBook(b, auth));
       res.status(200).json(list);
     } catch (error: any) {
       console.error("[BookController] Error fetching books:", error);
@@ -170,8 +190,8 @@ export class BookController {
   public getBookById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const book = await this.bookRepo.findById(id);
-      if (!book) {
+      const book = storyStore.getBook(id) ?? await this.bookRepo.findById(id);
+      if (!book || !this.canAccessBook(book, req as AuthedRequest)) {
         res.status(404).json({ error: "Book not found." });
         return;
       }
@@ -188,8 +208,8 @@ export class BookController {
   public getBookPages = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const book = await this.bookRepo.findById(id);
-      if (!book) {
+      const book = storyStore.getBook(id) ?? await this.bookRepo.findById(id);
+      if (!book || !this.canAccessBook(book, req as AuthedRequest)) {
         res.status(404).json({ error: "Book not found." });
         return;
       }
@@ -208,11 +228,18 @@ export class BookController {
       const { id } = req.params;
       const { title, coverTitle, pages } = req.body;
 
+      const existing = await this.bookRepo.findById(id);
+      if (!existing || !this.canAccessBook(existing, req as AuthedRequest)) {
+        res.status(404).json({ error: "Book not found." });
+        return;
+      }
+
       const updated = await this.bookRepo.update(id, { title, coverTitle, pages });
       if (!updated) {
         res.status(404).json({ error: "Book not found." });
         return;
       }
+      await storyStore.syncBook(id).catch(() => {}); // dual-write to stories/ (non-fatal)
 
       res.status(200).json({
         message: "Book metadata and contents updated successfully.",
@@ -231,7 +258,7 @@ export class BookController {
     try {
       const { id } = req.params;
       const book = await this.bookRepo.findById(id);
-      if (!book) {
+      if (!book || !this.canAccessBook(book, req as AuthedRequest)) {
         res.status(404).json({ error: "Book not found." });
         return;
       }
@@ -250,6 +277,7 @@ export class BookController {
           await this.bookRepo.updatePage(book.id, page.pageNumber, { imageStatus: "Queued" });
         }
       }
+      await storyStore.syncBook(book.id).catch(() => {}); // dual-write queued statuses to stories/
 
       res.status(200).json({
         message: `${jobsQueued.length} illustration tasks queued successfully in background.`,
@@ -268,7 +296,7 @@ export class BookController {
     try {
       const { bookId, pageNumber } = req.body;
       const book = await this.bookRepo.findById(bookId);
-      if (!book) {
+      if (!book || !this.canAccessBook(book, req as AuthedRequest)) {
         res.status(404).json({ error: "Book not found." });
         return;
       }
@@ -281,6 +309,7 @@ export class BookController {
 
       // Mark status as Queued and queue the job
       await this.bookRepo.updatePage(bookId, Number(pageNumber), { imageStatus: "Queued", imageError: undefined });
+      await storyStore.updatePage(bookId, Number(pageNumber)).catch(() => {}); // dual-write to stories/
       const job = await this.queueService.addJob(JobType.IMAGE, {
         bookId,
         pageNumber: Number(pageNumber)
@@ -303,7 +332,7 @@ export class BookController {
     try {
       const { id } = req.params;
       const book = await this.bookRepo.findById(id);
-      if (!book) {
+      if (!book || !this.canAccessBook(book, req as AuthedRequest)) {
         res.status(404).json({ error: "Book not found." });
         return;
       }
@@ -328,11 +357,17 @@ export class BookController {
   public deleteBook = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
+      const existing = await this.bookRepo.findById(id);
+      if (!existing || !this.canAccessBook(existing, req as AuthedRequest)) {
+        res.status(404).json({ error: "Book not found." });
+        return;
+      }
       const deleted = await this.bookRepo.delete(id);
       if (!deleted) {
         res.status(404).json({ error: "Book not found." });
         return;
       }
+      await storyStore.deleteStory(id).catch(() => {}); // remove mirror from stories/ (non-fatal)
       res.status(200).json({ message: "Book and page content deleted successfully." });
     } catch (error: any) {
       console.error("[BookController] Error deleting book:", error);

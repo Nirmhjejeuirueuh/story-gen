@@ -15,6 +15,7 @@
 
 import { initializeApp, type FirebaseApp } from "firebase/app";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyAEvipNUkRMiXaCZAFLTVc8Jgy8XTaJWGA",
@@ -27,3 +28,8 @@ export const firebaseConfig = {
 
 export const firebaseApp: FirebaseApp = initializeApp(firebaseConfig);
 export const firestore: Firestore = getFirestore(firebaseApp);
+
+// Firebase Authentication (client). Sign-in state lives here; the backend verifies the ID
+// token this issues. googleProvider backs the one-click Google sign-in button.
+export const auth: Auth = getAuth(firebaseApp);
+export const googleProvider = new GoogleAuthProvider();

@@ -15,6 +15,7 @@ import { QueueService } from "../services/QueueService.js";
 import { RequestValidator } from "../validators/validation.js";
 import { db } from "../database/db.js";
 import { storageService } from "../services/StorageService.js";
+import { authProtect, adminOnly, AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -46,6 +47,24 @@ router.get("/images/*", async (req: Request, res: Response) => {
   }
 });
 
+// Public story-library IMAGE endpoints. These serve stock (non-user) story-template artwork
+// and are loaded via <img src>, which can't send an Authorization header — so, like the image
+// proxy above, they must stay outside the auth gate. The story-library LIST/detail and
+// regenerate routes below stay protected (they go through fetch, which carries the token).
+router.get("/story-library/:id/characters/:key/image", storyLibraryController.getCharacterImage);
+router.get("/story-library/:id/chapters/:pageNumber/illustration", storyLibraryController.getChapterIllustration);
+
+// --- AUTH GATE ---
+// Everything below this line requires a valid Firebase ID token. The image routes above stay
+// public because <img> tags can't send an Authorization header (paths are unguessable).
+router.use(authProtect);
+
+// Returns the signed-in caller's identity, including whether they are an admin (drives the
+// frontend's admin-only System Settings tab).
+router.get("/auth/me", (req: AuthedRequest, res: Response) => {
+  res.status(200).json({ uid: req.uid, email: req.email, isAdmin: !!req.isAdmin });
+});
+
 // File Uploads
 router.post("/upload", RequestValidator.validateUpload, (req, res) => uploadController.uploadPhotos(req, res));
 
@@ -58,11 +77,12 @@ router.get("/characters/:id/sheet", characterController.getCharacterSheetByChara
 router.post("/characters/:id/regenerate-sheet", characterController.regenerateCharacterSheet);
 router.post("/character-sheet/:id/approve", characterController.approveCharacterSheet);
 
-// Fixed-cast Story Library (filesystem-authored story templates under server/stories/)
+// Fixed-cast Story Library (filesystem-authored story templates under server/stories/).
+// The two image-serving GET routes are registered above the auth gate (public, <img>-loaded).
 router.get("/story-library", storyLibraryController.listStories);
 router.get("/story-library/:id", storyLibraryController.getStory);
-router.get("/story-library/:id/characters/:key/image", storyLibraryController.getCharacterImage);
-router.get("/story-library/:id/chapters/:pageNumber/illustration", storyLibraryController.getChapterIllustration);
+router.get("/story-library/:id/characters/:key", storyLibraryController.getCharacterDetail);
+router.post("/story-library/:id/characters/:key/regenerate-sheet", storyLibraryController.regenerateCastSheet);
 router.post("/story-library/:id/chapters/:pageNumber/regenerate-illustration", storyLibraryController.regenerateChapterIllustration);
 
 // Books Management
@@ -85,8 +105,8 @@ router.get("/templates", bookController.getTemplates);
 router.post("/templates", bookController.saveTemplate);
 router.delete("/templates/:id", bookController.deleteTemplate);
 
-// System Settings Manager
-router.get("/settings", (req, res) => {
+// System Settings Manager — admin only (holds the shared Gemini/OpenAI API keys).
+router.get("/settings", adminOnly, (req, res) => {
   try {
     res.status(200).json(db.settings);
   } catch (error: any) {
@@ -94,7 +114,7 @@ router.get("/settings", (req, res) => {
   }
 });
 
-router.post("/settings", async (req, res) => {
+router.post("/settings", adminOnly, async (req, res) => {
   try {
     const { textProvider, imageProvider, geminiApiKey, openaiApiKey, openaiModel, openaiImageModel } = req.body;
     await db.setSettings({

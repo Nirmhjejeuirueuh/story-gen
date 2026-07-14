@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Job, JobType } from "../../src/types.js";
+import { Job, JobType, IllustrationStyle } from "../../src/types.js";
 import { JobRepository } from "../repositories/JobRepository.js";
 import { CharacterRepository } from "../repositories/CharacterRepository.js";
 import { BookRepository } from "../repositories/BookRepository.js";
@@ -12,6 +12,7 @@ import { geminiProvider } from "../providers/GeminiProvider.js";
 import { openaiProvider } from "../providers/OpenAIProvider.js";
 import { storyLibraryService } from "./StoryLibraryService.js";
 import { storageService } from "./StorageService.js";
+import { storyStore } from "./StoryStore.js";
 import { db } from "../database/db.js";
 
 export class QueueService {
@@ -172,6 +173,7 @@ export class QueueService {
               imageStatus: "Failed",
               imageError: error.message || "Illustration generation failed."
             });
+            await storyStore.updatePage(job.payload.bookId, job.payload.pageNumber).catch(() => {});
           }
         } else {
           // Linear backoff wait
@@ -191,43 +193,29 @@ export class QueueService {
 
     await this.jobRepo.update(job.id, { progress: 30 });
 
-    // Build a detailed visual profile of the child from custom attributes
-    let visualDetails = char.description || "";
-    const attributes: string[] = [];
-    if (char.hairStyle || char.hairColor) {
-      const hairDesc = [char.hairStyle, char.hairColor].filter(Boolean).join(" ");
-      attributes.push(`Hair: ${hairDesc}`);
-    }
-    if (char.eyeColor) {
-      attributes.push(`Eyes: ${char.eyeColor}`);
-    }
-    if (char.skinTone) {
-      attributes.push(`Skin Tone: ${char.skinTone}`);
-    }
-    if (char.clothingStyle) {
-      attributes.push(`Clothing Style: ${char.clothingStyle}`);
-    }
-    if (char.accessories) {
-      attributes.push(`Accessories: ${char.accessories}`);
-    }
-    if (char.personality) {
-      attributes.push(`Personality / Traits: ${char.personality}`);
-    }
-    if (char.additionalNotes) {
-      attributes.push(`Extra Details: ${char.additionalNotes}`);
-    }
+    // Resolve the child's uploaded photos as IMAGE references. The reference sheet is now
+    // conditioned on the real photos, so the AI derives the child's actual appearance (hair
+    // style incl. braids, hair/eye colour, skin tone, facial features) straight from them —
+    // instead of from limited dropdown selections. Optional free-text notes still enrich it.
+    const photoRefs = (await Promise.all(
+      (char.photos || []).slice(0, 3).map((p) => storageService.resolveReference(p))
+    )).filter((ref): ref is { mime: string; data: string } => !!ref);
 
-    if (attributes.length > 0) {
-      visualDetails += "\n\nSpecific Visual Attributes to include:\n" + attributes.map(a => `- ${a}`).join("\n");
+    const notes = [char.description, char.personality, char.additionalNotes].filter(Boolean).join(". ");
+    let visualDetails = notes;
+    if (photoRefs.length > 0) {
+      visualDetails += (notes ? "\n\n" : "") +
+        "Reference photos of the real child are provided as IMAGE references. Faithfully capture the child's actual appearance from them — hairstyle (including braids/locs/curls), hair colour, skin tone, eye colour, and distinctive facial features — and re-draw the child in the house art style.";
     }
 
     const prompt = promptEngine.generateCharacterPrompt(char.name, char.age, char.gender, visualDetails);
-    
-    // Call configured provider to generate the comprehensive reference sheet
+
+    // Call configured provider. With photos, generate conditioned on them; otherwise fall back
+    // to a text-only sheet (both providers gracefully degrade when no references are supplied).
     const imageProvider = db.settings?.imageProvider || "gemini";
     const rawSheetImage = imageProvider === "openai"
-      ? await openaiProvider.generateCharacterSheet(prompt)
-      : await geminiProvider.generateCharacterSheet(prompt);
+      ? await openaiProvider.generateImageWithReferences(prompt, photoRefs)
+      : await geminiProvider.generateImageWithReferences(prompt, photoRefs, IllustrationStyle.STORYBOOK);
 
     await this.jobRepo.update(job.id, { progress: 80 });
 
@@ -301,6 +289,7 @@ export class QueueService {
       coverTitle: storyResult.coverTitle || "An AI Personalized Story Book",
       pages
     });
+    await storyStore.syncBook(bookId).catch(() => {}); // dual-write generated pages to stories/
 
     await this.jobRepo.update(job.id, {
       status: "Completed",
@@ -321,6 +310,7 @@ export class QueueService {
     if (!page) throw new Error(`Book page ${pageNumber} not found.`);
 
     await this.bookRepo.updatePage(bookId, pageNumber, { imageStatus: "Generating" });
+    await storyStore.updatePage(bookId, pageNumber).catch(() => {});
     await this.jobRepo.update(job.id, { progress: 30 });
 
     const imageProvider = db.settings?.imageProvider || "gemini";
@@ -430,6 +420,7 @@ export class QueueService {
       imageUrl,
       imageStatus: "Completed"
     });
+    await storyStore.updatePage(bookId, pageNumber).catch(() => {}); // dual-write completed page
 
     await this.jobRepo.update(job.id, {
       status: "Completed",

@@ -26,6 +26,7 @@ export interface StoryTemplate {
 
 export interface Character {
   id: string;
+  ownerId?: string; // Firebase uid of the user who created it; absent on legacy/shared records
   name: string;
   age: number;
   gender: string;
@@ -53,6 +54,7 @@ export interface CharacterSheet {
 
 export interface Book {
   id: string;
+  ownerId?: string; // Firebase uid of the user who created it; absent on legacy/shared records
   title: string;
   coverTitle: string;
   characterId?: string; // absent for fixed-cast library storybooks
@@ -67,7 +69,8 @@ export interface Book {
 export interface BookPage {
   id: string;
   pageNumber: number;
-  storyText: string;
+  storyText: string; // canonical (English) text; kept for back-compat
+  texts?: Record<string, string>; // language code -> text, e.g. { en: "...", ja: "..." }
   illustrationPrompt: string;
   characterKeys?: string[]; // Story Library character reference keys used for this page's illustration
   imageUrl?: string; // Generated image
@@ -97,6 +100,100 @@ export interface StoryLibraryEntry {
   tags: string[]; // theme/genre labels shown as chips on the library card (from tags.txt)
   characters: StoryLibraryCharacter[];
   chapters: StoryLibraryChapter[];
+}
+
+// --- Firestore-backed Story Templates (P1 of the DB restructure) ---
+// Mirrors the filesystem Story Library into Firestore under:
+//   storyTemplates/{id}
+//   storyTemplates/{id}/pages/{pageNumber}
+//   storyTemplates/{id}/characters/{key}
+// The filesystem remains the seed source + fallback until reads are fully cut over.
+export interface StoryTemplateDoc {
+  id: string;
+  title: string;
+  tags: string[];
+  pageCount: number;
+  style: string;
+  description?: string;
+  createdAt: string;
+}
+
+export interface TemplatePageDoc {
+  pageNumber: number;
+  storyText: string;
+  illustrationPrompt: string;
+  characterKeys: string[];
+}
+
+export interface TemplateCharacterDoc {
+  key: string;               // normalized lowercase cast key, e.g. "white rabbit"
+  name: string;              // display name, e.g. "White Rabbit"
+  role?: string;             // optional placeholder role (e.g. MAIN_CHARACTER) for personalization
+  prompt: string | null;     // character-sheet prompt (from charators/<key>.md); null if image-only
+  sheetImageUrl: string;     // clean single reference image — used as the GENERATION reference
+  displaySheetImageUrl?: string; // optional generated multi-view pose sheet — DISPLAY only
+  approved: boolean;
+  createdAt: string;
+}
+
+// --- Firestore-backed generated Stories (P1 Slice 3 of the DB restructure) ---
+// stories/{id}                    (metadata + characterMap field)
+// stories/{id}/pages/{pageNumber} (texts{} multi-language, per-page status)
+// stories/{id}/characters/{charId}
+// stories/{id}/generation/status
+// Mirrors the existing `books` collection; books stay primary until reads are cut over.
+export interface StoryDoc {
+  id: string;
+  title: string;
+  description: string;
+  coverImageUrl: string;
+  coverPrompt: string;
+  style: string;
+  language: string[];
+  pageCount: number;
+  status: "draft" | "generating" | "completed";
+  templateId: string;
+  libraryStoryId: string | null;
+  createdBy: string | null;
+  characterMap: Record<string, string>; // role placeholder -> characterId, e.g. MAIN_CHARACTER -> main
+  // Compat fields so a stories/{id} doc round-trips losslessly back to the legacy Book shape
+  // while both models coexist (books stays write-primary during the migration).
+  childName: string;
+  characterId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoryPageDoc {
+  pageNumber: number;
+  title: string;
+  illustrationPrompt: string;
+  illustrationImageUrl: string;
+  texts: Record<string, string>; // language code -> text, e.g. { en: "..." }
+  characterIds: string[];
+  status: "Queued" | "Generating" | "Completed" | "Failed";
+  regeneratedCount: number;
+}
+
+export interface StoryCharacterDoc {
+  id: string;                      // "main" for the custom hero, else the cast key
+  role: string;                    // placeholder role, e.g. MAIN_CHARACTER or SHERE_KHAN
+  name: string;
+  type: "custom" | "template";
+  characterSheetImageUrl: string;
+  prompt: string | null;
+  approved: boolean;
+  style: string;
+  createdAt: string;
+}
+
+export interface GenerationStatusDoc {
+  characterSheetStatus: string;
+  storyStatus: string;
+  imagesStatus: string;
+  completedPages: number;
+  totalPages: number;
+  pdfStatus: string;
 }
 
 export enum JobType {

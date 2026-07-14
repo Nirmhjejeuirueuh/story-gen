@@ -8,12 +8,21 @@ import { CharacterRepository } from "../repositories/CharacterRepository.js";
 import { QueueService } from "../services/QueueService.js";
 import { storageService } from "../services/StorageService.js";
 import { JobType, Character } from "../../src/types.js";
+import { AuthedRequest } from "../middleware/auth.js";
 
 export class CharacterController {
   constructor(
     private characterRepo: CharacterRepository,
     private queueService: QueueService
   ) {}
+
+  /**
+   * Whether the caller may read/modify this character: the owner, or an admin for legacy
+   * characters that predate per-user ownership (no ownerId).
+   */
+  private canAccessChar(char: Character, req: AuthedRequest): boolean {
+    return char.ownerId === req.uid || (!!req.isAdmin && !char.ownerId);
+  }
 
   /**
    * Creates a character profile and initiates official reference sheet generation in the background
@@ -48,6 +57,7 @@ export class CharacterController {
 
       const character: Character = {
         id: charId,
+        ownerId: (req as AuthedRequest).uid,
         name,
         age,
         gender,
@@ -90,7 +100,7 @@ export class CharacterController {
     try {
       const { id } = req.params; // characterId
       const char = await this.characterRepo.findById(id);
-      if (!char) {
+      if (!char || !this.canAccessChar(char, req as AuthedRequest)) {
         res.status(404).json({ error: "Character profile not found." });
         return;
       }
@@ -113,8 +123,14 @@ export class CharacterController {
   public getCharacterSheetByCharacterId = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params; // characterId
+      const owner = await this.characterRepo.findById(id);
+      if (!owner || !this.canAccessChar(owner, req as AuthedRequest)) {
+        res.status(404).json({ error: "Character profile not found." });
+        return;
+      }
+
       const sheet = await this.characterRepo.findSheetByCharacterId(id);
-      
+
       if (!sheet) {
         res.status(404).json({ error: "Character sheet not found for this profile. It may still be generating." });
         return;
@@ -134,6 +150,13 @@ export class CharacterController {
     try {
       const { id } = req.params; // sheetId
       const { approved } = req.body;
+
+      const sheet = await this.characterRepo.findSheetById(id);
+      const owner = sheet ? await this.characterRepo.findById(sheet.characterId) : null;
+      if (!sheet || !owner || !this.canAccessChar(owner, req as AuthedRequest)) {
+        res.status(404).json({ error: "Character sheet not found." });
+        return;
+      }
 
       const updated = await this.characterRepo.updateSheet(id, { approved: !!approved });
       if (!updated) {
@@ -156,7 +179,8 @@ export class CharacterController {
    */
   public getAllCharacters = async (req: Request, res: Response): Promise<void> => {
     try {
-      const list = await this.characterRepo.findAll();
+      const auth = req as AuthedRequest;
+      const list = (await this.characterRepo.findAll()).filter((c) => this.canAccessChar(c, auth));
       res.status(200).json(list);
     } catch (error: any) {
       console.error("[CharacterController] Error fetching list:", error);
@@ -171,7 +195,7 @@ export class CharacterController {
     try {
       const { id } = req.params;
       const char = await this.characterRepo.findById(id);
-      if (!char) {
+      if (!char || !this.canAccessChar(char, req as AuthedRequest)) {
         res.status(404).json({ error: "Character profile not found." });
         return;
       }
@@ -188,6 +212,11 @@ export class CharacterController {
   public deleteCharacter = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
+      const existing = await this.characterRepo.findById(id);
+      if (!existing || !this.canAccessChar(existing, req as AuthedRequest)) {
+        res.status(404).json({ error: "Character profile not found." });
+        return;
+      }
       const deleted = await this.characterRepo.delete(id);
       if (!deleted) {
         res.status(404).json({ error: "Character profile not found." });
