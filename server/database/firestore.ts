@@ -21,18 +21,19 @@ import { getFirestore as getAdminFirestore, type Firestore } from "firebase-admi
 import fs from "fs";
 import path from "path";
 
-function loadServiceAccount(): ServiceAccount {
+/**
+ * Loads explicit service-account credentials from, in priority order:
+ *   1. FIREBASE_SERVICE_ACCOUNT env var (JSON) — for hosts where a key is provided that way.
+ *   2. server/serviceAccountKey.json — local development.
+ * Returns null when neither is present, so the caller falls back to Application Default
+ * Credentials (ADC) — which is how Cloud Run authenticates via its own service account.
+ */
+function tryLoadServiceAccount(): ServiceAccount | null {
   const envJson = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (envJson) {
-    return JSON.parse(envJson) as ServiceAccount;
-  }
+  if (envJson) return JSON.parse(envJson) as ServiceAccount;
   const keyPath = path.join(process.cwd(), "server", "serviceAccountKey.json");
-  if (!fs.existsSync(keyPath)) {
-    throw new Error(
-      "Firebase credentials not found: set FIREBASE_SERVICE_ACCOUNT or add server/serviceAccountKey.json"
-    );
-  }
-  return JSON.parse(fs.readFileSync(keyPath, "utf-8")) as ServiceAccount;
+  if (fs.existsSync(keyPath)) return JSON.parse(fs.readFileSync(keyPath, "utf-8")) as ServiceAccount;
+  return null;
 }
 
 let firestoreInstance: Firestore | null = null;
@@ -40,7 +41,8 @@ let firestoreInstance: Firestore | null = null;
 export function getFirestore(): Firestore {
   if (!firestoreInstance) {
     if (getApps().length === 0) {
-      initializeApp({ credential: cert(loadServiceAccount()) });
+      const creds = tryLoadServiceAccount();
+      initializeApp(creds ? { credential: cert(creds) } : {}); // {} → Application Default Credentials
     }
     firestoreInstance = getAdminFirestore();
   }

@@ -9,7 +9,7 @@ import { db } from "../database/db.js";
 export class JobRepository {
   public async create(job: Job): Promise<Job> {
     db.jobs.push(job);
-    db.save();
+    await db.upsert("jobs", job.id, job);
     return job;
   }
 
@@ -25,13 +25,13 @@ export class JobRepository {
   public async update(id: string, updates: Partial<Job>): Promise<Job | null> {
     const index = db.jobs.findIndex(j => j.id === id);
     if (index === -1) return null;
-    
+
     db.jobs[index] = {
       ...db.jobs[index],
       ...updates,
       updatedAt: new Date().toISOString()
     };
-    db.save();
+    await db.upsert("jobs", id, db.jobs[index]);
     return db.jobs[index];
   }
 

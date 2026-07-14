@@ -94,17 +94,17 @@ router.get("/settings", (req, res) => {
   }
 });
 
-router.post("/settings", (req, res) => {
+router.post("/settings", async (req, res) => {
   try {
     const { textProvider, imageProvider, geminiApiKey, openaiApiKey, openaiModel, openaiImageModel } = req.body;
-    db.settings = {
+    await db.setSettings({
       textProvider: textProvider || "gemini",
       imageProvider: imageProvider || "gemini",
       geminiApiKey: geminiApiKey || "",
       openaiApiKey: openaiApiKey || "",
       openaiModel: openaiModel || "gpt-4o-mini",
       openaiImageModel: openaiImageModel || "gpt-image-1"
-    };
+    });
     res.status(200).json({ success: true, settings: db.settings });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to save settings: " + error.message });

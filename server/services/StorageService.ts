@@ -20,6 +20,7 @@
  */
 
 import { Storage } from "@google-cloud/storage";
+import fs from "fs";
 import path from "path";
 import type { Response } from "express";
 
@@ -33,11 +34,17 @@ class StorageService {
     this.enabled = process.env.IMAGE_STORAGE !== "base64";
     if (this.enabled) {
       try {
-        // Prefer an env-provided key (production), else the local git-ignored key file (dev).
+        // Credentials, in priority order: env-provided key JSON → local key file → Application
+        // Default Credentials (Cloud Run's own service account, when neither is present).
         const envJson = process.env.FIREBASE_SERVICE_ACCOUNT;
-        this.storage = envJson
-          ? new Storage({ credentials: JSON.parse(envJson) })
-          : new Storage({ keyFilename: path.join(process.cwd(), "server", "serviceAccountKey.json") });
+        const keyPath = path.join(process.cwd(), "server", "serviceAccountKey.json");
+        if (envJson) {
+          this.storage = new Storage({ credentials: JSON.parse(envJson) });
+        } else if (fs.existsSync(keyPath)) {
+          this.storage = new Storage({ keyFilename: keyPath });
+        } else {
+          this.storage = new Storage(); // ADC
+        }
       } catch (err: any) {
         console.error("[StorageService] Init failed, falling back to inline base64:", err.message);
         this.enabled = false;

@@ -8,14 +8,19 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import apiRouter from "./server/routes/routes.js";
+import { db } from "./server/database/db.js";
 
 // Load environment variables
 dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   const HOST = "0.0.0.0";
+
+  // Hydrate the in-memory cache from Firestore before serving any requests.
+  console.log("[Server] Initializing Firestore database...");
+  await db.init();
 
   // Large limit for base64 photo uploads
   app.use(express.json({ limit: "50mb" }));
