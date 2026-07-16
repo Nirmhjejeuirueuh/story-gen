@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard,
@@ -22,13 +22,13 @@ import {
   CheckCircle2,
   FileText,
   AlertCircle,
-  Library
+  Library,
+  LogOut
 } from "lucide-react";
 
 import { Character, Book, StoryTemplate, IllustrationStyle, Job, JobType } from "./types.js";
 import ImageUploader from "./components/ImageUploader.tsx";
 import CharacterSheetViewer from "./components/CharacterSheetViewer.tsx";
-import StorySelector from "./components/StorySelector.tsx";
 import StoryEditor from "./components/StoryEditor.tsx";
 import BookPreview from "./components/BookPreview.tsx";
 import ImageGenerationStatus from "./components/ImageGenerationStatus.tsx";
@@ -36,13 +36,17 @@ import PDFExportDialog from "./components/PDFExportDialog.tsx";
 import TemplateConfig from "./components/TemplateConfig.tsx";
 import SystemSettings from "./components/SystemSettings.tsx";
 import StoryLibraryBrowser from "./components/StoryLibraryBrowser.tsx";
+import { useAuth } from "./auth/AuthContext.tsx";
 import { DEFAULT_STYLES } from "../server/config/config.js";
 
 type Tab = "dashboard" | "wizard" | "books" | "templates" | "characters" | "jobs" | "settings" | "library";
 
 export default function App() {
+  // Authenticated user (drives admin-only UI + the sign-out control)
+  const { user, isAdmin, logout } = useAuth();
+
   // Navigation
-  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [activeTab, setActiveTab] = useState<Tab>("library");
   const [wizardStep, setWizardStep] = useState<number>(1);
 
   // Entities state
@@ -61,12 +65,6 @@ export default function App() {
   const [charAge, setCharAge] = useState(5);
   const [charGender, setCharGender] = useState("Boy");
   const [charDesc, setCharDesc] = useState("");
-  const [charHairColor, setCharHairColor] = useState("Brown");
-  const [charHairStyle, setCharHairStyle] = useState("Short");
-  const [charEyeColor, setCharEyeColor] = useState("Brown");
-  const [charSkinTone, setCharSkinTone] = useState("Fair");
-  const [charClothingStyle, setCharClothingStyle] = useState("Colorful T-shirt and Jeans");
-  const [charAccessories, setCharAccessories] = useState("None");
   const [charPersonality, setCharPersonality] = useState("Cheerful and Adventurous");
   const [charAdditionalNotes, setCharAdditionalNotes] = useState("");
   
@@ -106,6 +104,38 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [charSheetJobId, storyJobId, activeBook?.id]);
+
+  // Adaptive fast polling: while the active book still has illustrations queued or
+  // generating, refresh it every 1.5s so page statuses (Queued → Drawing → Ready)
+  // update live. Stops automatically once every page has finished rendering.
+  const activeBookHasPendingPages = !!activeBook?.pages?.some(
+    (p) => p.imageStatus === "Queued" || p.imageStatus === "Generating"
+  );
+  useEffect(() => {
+    if (!activeBook?.id || !activeBookHasPendingPages) return;
+    const fastInterval = setInterval(() => {
+      refreshActiveBook();
+      fetchJobs();
+    }, 1500);
+    return () => clearInterval(fastInterval);
+  }, [activeBook?.id, activeBookHasPendingPages]);
+
+  // Auto-start batch illustration rendering when the wizard lands on Step 6.
+  // Pages are created with imageStatus "Queued", but no image job actually exists until
+  // POST /api/books/:id/generate is called — previously only the manual "Draw" button did
+  // that, so the pipeline sat at 0% until the user clicked it. Fire it automatically exactly
+  // once per book (guarded by a ref) when every page is still untouched ("Queued", no image).
+  const autoStartedBookIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (wizardStep !== 6 || activeTab !== "wizard" || !activeBook?.id) return;
+    if (autoStartedBookIdsRef.current.has(activeBook.id)) return;
+    const pages = activeBook.pages || [];
+    const allUntouched = pages.length > 0 && pages.every((p) => p.imageStatus === "Queued" && !p.imageUrl);
+    if (allUntouched) {
+      autoStartedBookIdsRef.current.add(activeBook.id);
+      handleBatchDrawIllustrations();
+    }
+  }, [wizardStep, activeTab, activeBook?.id, activeBook?.pages]);
 
   // --- API QUERIES ---
 
@@ -243,26 +273,68 @@ export default function App() {
     }
   };
 
-  // Create a book directly from a fixed-cast Story Library entry (bypasses personalization entirely)
+  // Create a book from a Story Library entry. Optionally stars an uploaded character as the
+  // MAIN_CHARACTER hero (personalized illustrations + name); otherwise uses the story's cast.
   const [isCreatingFromLibrary, setIsCreatingFromLibrary] = useState(false);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [libraryHeroCharacterId, setLibraryHeroCharacterId] = useState<string>("");
+  const [libraryHeroName, setLibraryHeroName] = useState<string>("");
   const handleCreateFromLibrary = async (libraryStoryId: string) => {
     setIsCreatingFromLibrary(true);
     setLibraryError(null);
     try {
+      const hero = characters.find((c) => c.id === libraryHeroCharacterId) || null;
+      const heroName = libraryHeroName.trim() || hero?.name || "";
       const res = await fetch("/api/books/from-library", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ libraryStoryId }),
+        body: JSON.stringify({
+          libraryStoryId,
+          characterId: hero?.id || undefined,
+          childName: heroName || undefined,
+        }),
       });
       const contentType = res.headers.get("content-type");
       const data = (contentType && contentType.includes("application/json")) ? await res.json() : null;
       if (!res.ok || !data) throw new Error(data?.error || "Failed to create storybook from library.");
 
       setActiveBook(data.book);
-      setCreatedCharacter(null);
+      setCreatedCharacter(hero);
       fetchBooks();
       setWizardStep(6); // Straight to illustration rendering
+      setActiveTab("wizard");
+    } catch (err: any) {
+      setLibraryError(err.message);
+    } finally {
+      setIsCreatingFromLibrary(false);
+    }
+  };
+
+  // Wizard step 3: the created character stars in the chosen Story Library story (their
+  // photo-based sheet conditions the illustrations). Jumps straight to rendering.
+  const handleWizardSelectStory = async (libraryStoryId: string) => {
+    if (!createdCharacter) {
+      setWizardError("Please create a character first.");
+      return;
+    }
+    setIsCreatingFromLibrary(true);
+    setLibraryError(null);
+    try {
+      const res = await fetch("/api/books/from-library", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          libraryStoryId,
+          characterId: createdCharacter.id,
+          childName: createdCharacter.name,
+        }),
+      });
+      const ct = res.headers.get("content-type");
+      const data = (ct && ct.includes("application/json")) ? await res.json() : null;
+      if (!res.ok || !data) throw new Error(data?.error || "Failed to create storybook.");
+      setActiveBook(data.book);
+      fetchBooks();
+      setWizardStep(6); // straight to illustration rendering
       setActiveTab("wizard");
     } catch (err: any) {
       setLibraryError(err.message);
@@ -291,12 +363,6 @@ export default function App() {
           gender: charGender,
           description: charDesc || `A joyful, active ${charGender.toLowerCase()}`,
           photos: wizardPhotos,
-          hairColor: charHairColor,
-          hairStyle: charHairStyle,
-          eyeColor: charEyeColor,
-          skinTone: charSkinTone,
-          clothingStyle: charClothingStyle,
-          accessories: charAccessories,
           personality: charPersonality,
           additionalNotes: charAdditionalNotes
         }),
@@ -535,22 +601,17 @@ export default function App() {
             >
               <Library className="h-4 w-4" /> Story Library
             </button>
-            <button
-              onClick={() => setActiveTab("templates")}
-              className={`w-full p-3 rounded-xl font-bold text-sm flex items-center gap-3 transition ${
-                activeTab === "templates" ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
-              }`}
-            >
-              <BookMarked className="h-4 w-4" /> Config &amp; Prompts
-            </button>
-            <button
-              onClick={() => setActiveTab("settings")}
-              className={`w-full p-3 rounded-xl font-bold text-sm flex items-center gap-3 transition ${
-                activeTab === "settings" ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
-              }`}
-            >
-              <Settings className="h-4 w-4" /> System Settings
-            </button>
+            {/* Config & Prompts (AI-template editor) retired — the Story Library is now the single source of stories. */}
+            {isAdmin && (
+              <button
+                onClick={() => setActiveTab("settings")}
+                className={`w-full p-3 rounded-xl font-bold text-sm flex items-center gap-3 transition ${
+                  activeTab === "settings" ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
+                }`}
+              >
+                <Settings className="h-4 w-4" /> System Settings
+              </button>
+            )}
             <button
               onClick={() => setActiveTab("characters")}
               className={`w-full p-3 rounded-xl font-bold text-sm flex items-center gap-3 transition ${
@@ -570,9 +631,23 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Footer info */}
-        <div className="p-4 border-t border-slate-800 text-[10px] text-slate-500 font-bold tracking-wider text-center">
-          HOST PORT: 3000 • SANDBOXED
+        {/* Footer: signed-in user + sign out */}
+        <div className="p-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center gap-2.5 px-2 py-1.5">
+            <div className="h-8 w-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-xs shrink-0 uppercase">
+              {(user?.displayName || user?.email || "?").charAt(0)}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-white truncate">{user?.displayName || "Signed in"}</p>
+              <p className="text-[10px] text-slate-400 truncate">{user?.email}{isAdmin ? " • Admin" : ""}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => logout()}
+            className="w-full p-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 text-slate-400 hover:bg-slate-800/50 hover:text-white transition"
+          >
+            <LogOut className="h-3.5 w-3.5" /> Sign Out
+          </button>
         </div>
       </aside>
 
@@ -704,21 +779,20 @@ export default function App() {
               {/* Step indicator header */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex justify-between items-center select-none overflow-x-auto gap-4">
                 {[
-                  "1. Character",
-                  "2. Character Sheet",
-                  "3. Story Book Template",
-                  "4. Style",
-                  "5. Text Draft",
-                  "6. Render Illustrations",
-                  "7. Book Preview",
-                  "8. Print Ready",
+                  { num: 1, label: "Character" },
+                  { num: 2, label: "Character Sheet" },
+                  { num: 3, label: "Choose Story" },
+                  { num: 6, label: "Render Illustrations" },
+                  { num: 7, label: "Book Preview" },
+                  { num: 8, label: "Print Ready" },
                 ].map((step, i) => {
-                  const num = i + 1;
+                  const num = step.num;
+                  const displayNum = i + 1;
                   const isActive = wizardStep === num;
                   const isPast = wizardStep > num;
                   return (
                     <div
-                      key={step}
+                      key={step.num}
                       className={`flex items-center gap-1.5 font-bold text-xs whitespace-nowrap ${
                         isActive
                           ? "text-emerald-600"
@@ -734,9 +808,9 @@ export default function App() {
                           ? "bg-slate-100 border-slate-300 text-slate-500"
                           : "bg-transparent border-slate-200 text-slate-400"
                       }`}>
-                        {num}
+                        {displayNum}
                       </span>
-                      <span>{step.substring(3)}</span>
+                      <span>{step.label}</span>
                     </div>
                   );
                 })}
@@ -882,116 +956,23 @@ export default function App() {
 
                       <div className="space-y-1.5 bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100/70">
                         <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-                          💡 Visual Attributes Mode
+                          📸 Photo-Driven Likeness
                         </h4>
                         <p className="text-xs text-slate-600 leading-relaxed">
-                          You can describe the child below. Uploading photos is <strong>completely optional</strong>! The AI can generate consistent illustrations purely from your custom styling inputs.
+                          Upload a clear photo of the child — the AI builds their character sheet from it, capturing their real hair, skin tone, and features. <strong>A photo is strongly recommended</strong> for an accurate likeness.
                         </p>
                       </div>
                     </div>
 
                     {/* Middle Column: Detailed Visual Style Attributes */}
                     <div className="lg:col-span-1 space-y-4 bg-slate-50/40 p-4 rounded-3xl border border-slate-100">
-                      <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2">Configure Visual Attributes</h4>
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-extrabold text-slate-500">Hair Style</label>
-                          <select
-                            value={charHairStyle}
-                            onChange={(e) => setCharHairStyle(e.target.value)}
-                            className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white font-semibold"
-                          >
-                            <option value="Short">Short</option>
-                            <option value="Short & Curly">Short & Curly</option>
-                            <option value="Short & Straight">Short & Straight</option>
-                            <option value="Long Straight with Bangs">Long Straight</option>
-                            <option value="Long Wavy">Long Wavy</option>
-                            <option value="Ponytail">Ponytail</option>
-                            <option value="Pigtails">Pigtails</option>
-                            <option value="Spiky Cute">Spiky Cute</option>
-                            <option value="Messy Bedhead">Messy Bedhead</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-extrabold text-slate-500">Hair Color</label>
-                          <select
-                            value={charHairColor}
-                            onChange={(e) => setCharHairColor(e.target.value)}
-                            className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white font-semibold"
-                          >
-                            <option value="Brown">Brown</option>
-                            <option value="Black">Black</option>
-                            <option value="Blonde">Blonde</option>
-                            <option value="Red / Ginger">Red / Ginger</option>
-                            <option value="Dirty Blonde">Dirty Blonde</option>
-                            <option value="Auburn">Auburn</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-extrabold text-slate-500">Eye Color</label>
-                          <select
-                            value={charEyeColor}
-                            onChange={(e) => setCharEyeColor(e.target.value)}
-                            className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white font-semibold"
-                          >
-                            <option value="Brown">Brown</option>
-                            <option value="Blue">Blue</option>
-                            <option value="Green">Green</option>
-                            <option value="Hazel">Hazel</option>
-                            <option value="Dark">Dark / Black</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-extrabold text-slate-500">Skin Tone</label>
-                          <select
-                            value={charSkinTone}
-                            onChange={(e) => setCharSkinTone(e.target.value)}
-                            className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white font-semibold"
-                          >
-                            <option value="Fair">Fair</option>
-                            <option value="Light Warm">Light Warm</option>
-                            <option value="Medium / Tan">Medium / Tan</option>
-                            <option value="Dark / Deep">Dark / Deep</option>
-                            <option value="Olive">Olive</option>
-                          </select>
-                        </div>
-                      </div>
+                      <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2">Optional Details</h4>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        The child's appearance — hair (braids, curls, anything), skin tone, eye colour, features — is captured automatically from the uploaded photo. No need to pick from lists. Add a note below only for details a photo can't show.
+                      </p>
 
                       <div className="space-y-1">
-                        <label className="text-[11px] font-extrabold text-slate-500">Clothing Style</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Colorful T-shirt and Jeans"
-                          value={charClothingStyle}
-                          onChange={(e) => setCharClothingStyle(e.target.value)}
-                          className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-extrabold text-slate-500">Accessories</label>
-                        <select
-                          value={charAccessories}
-                          onChange={(e) => setCharAccessories(e.target.value)}
-                          className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white font-semibold"
-                        >
-                          <option value="None">None</option>
-                          <option value="Round Glasses">Round Glasses</option>
-                          <option value="Square Glasses">Square Glasses</option>
-                          <option value="Cute Baseball Cap">Cute Baseball Cap</option>
-                          <option value="Red Cape">Red Cape</option>
-                          <option value="Tiny Backpack">Tiny Backpack</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-extrabold text-slate-500">Personality Traits</label>
+                        <label className="text-[11px] font-extrabold text-slate-500">Personality Traits (Optional)</label>
                         <input
                           type="text"
                           placeholder="e.g. Cheerful and Adventurous"
@@ -1013,11 +994,11 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Right Column: Reference Photos (Optional) */}
+                    {/* Right Column: Reference Photo (drives the character's appearance) */}
                     <div className="lg:col-span-1 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Reference Photos (Optional)</span>
-                        <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full font-bold">Optional</span>
+                        <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Reference Photo</span>
+                        <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-bold">Recommended</span>
                       </div>
                       <ImageUploader onImagesSelected={setWizardPhotos} />
                     </div>
@@ -1072,30 +1053,21 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   className="space-y-6"
                 >
-                  <StorySelector
-                    templates={templates}
-                    selectedId={selectedTemplateId}
-                    onSelect={setSelectedTemplateId}
-                    onAddCustomTemplate={handleSaveTemplate}
-                    onDeleteTemplate={handleDeleteTemplate}
-                  />
-
-                  {selectedTemplateId && (
-                    <div className="flex justify-between pt-4 border-t border-slate-200">
-                      <button
-                        onClick={() => setWizardStep(2)}
-                        className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition"
-                      >
-                        Back to Character Sheet
-                      </button>
-                      <button
-                        onClick={() => setWizardStep(4)}
-                        className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl text-sm transition shadow flex items-center gap-1"
-                      >
-                        Choose Illustration Style <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Pick a story for <strong className="text-slate-700">{createdCharacter?.name}</strong> to star in — their photo-based character sheet is used automatically so they look consistent on every page.
+                    </p>
+                    <button
+                      onClick={() => setWizardStep(2)}
+                      className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition whitespace-nowrap"
+                    >
+                      Back
+                    </button>
+                  </div>
+                  {libraryError && (
+                    <div className="text-sm text-red-600 font-medium bg-red-50 border border-red-100 rounded-xl px-3 py-2">{libraryError}</div>
                   )}
+                  <StoryLibraryBrowser onCreate={handleWizardSelectStory} isCreating={isCreatingFromLibrary} />
                 </motion.div>
               )}
 
@@ -1314,6 +1286,59 @@ export default function App() {
                   <button onClick={() => setLibraryError(null)} className="ml-auto font-bold">✕</button>
                 </div>
               )}
+
+              {/* Optional hero personalization applied to any story created below */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                <div>
+                  <h4 className="font-bold text-slate-800 text-base flex items-center gap-1.5">
+                    <Sparkles className="h-5 w-5 text-emerald-600" /> Personalize the hero (optional)
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Star an uploaded character as the <strong>MAIN_CHARACTER</strong> hero of any story below — their photo shapes the illustrations and their name fills the text. Leave blank for the generic version with the story&apos;s own cast.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Hero Character</label>
+                    <select
+                      value={libraryHeroCharacterId}
+                      onChange={(e) => {
+                        setLibraryHeroCharacterId(e.target.value);
+                        const c = characters.find((ch) => ch.id === e.target.value);
+                        if (c && !libraryHeroName.trim()) setLibraryHeroName(c.name);
+                      }}
+                      className="w-full text-sm p-3 border border-slate-200 rounded-xl bg-slate-50 font-semibold"
+                    >
+                      <option value="">— None (use the story&apos;s own cast) —</option>
+                      {characters.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.age} y/o {c.gender}){c.characterSheetId ? " • sheet ready" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {characters.length === 0 && (
+                      <p className="text-[11px] text-slate-400">No characters yet — create one in the Story Wizard (upload a photo) to personalize.</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Hero Name (shown in the story text)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Liam"
+                      value={libraryHeroName}
+                      onChange={(e) => setLibraryHeroName(e.target.value)}
+                      className="w-full text-sm p-3 border border-slate-200 rounded-xl bg-slate-50 font-semibold"
+                    />
+                  </div>
+                </div>
+                {libraryHeroCharacterId && (
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span>Stories created below will star {libraryHeroName.trim() || "this character"} as the hero.</span>
+                  </div>
+                )}
+              </div>
+
               <StoryLibraryBrowser onCreate={handleCreateFromLibrary} isCreating={isCreatingFromLibrary} />
             </motion.div>
           )}

@@ -5,6 +5,7 @@
 
 import React from "react";
 import { Book } from "../types.js";
+import { personalizeStoryText } from "../utils/personalize.js";
 import { RefreshCw, Play, CheckCircle, AlertCircle, Sparkles, Loader2 } from "lucide-react";
 
 interface ImageGenerationStatusProps {
@@ -110,7 +111,7 @@ export default function ImageGenerationStatus({
                 {p.pageNumber}
               </span>
               <p className="text-slate-700 font-medium line-clamp-1 max-w-[200px] md:max-w-md">
-                {p.storyText}
+                {personalizeStoryText(p.storyText, book.childName)}
               </p>
             </div>
 

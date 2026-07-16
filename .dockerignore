@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+*.log
+npm-debug.log*
+# Secrets & local state — never ship these; prod uses Firestore + Cloud Run's service account.
+.env
+.env.*
+!.env.example
+data_db.json
+server/serviceAccountKey.json
+**/serviceAccountKey.json

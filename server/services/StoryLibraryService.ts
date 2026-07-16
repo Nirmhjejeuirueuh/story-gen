@@ -6,6 +6,7 @@
 import fs from "fs";
 import path from "path";
 import { StoryLibraryEntry, StoryLibraryChapter, StoryLibraryCharacter } from "../../src/types.js";
+import { storageService } from "./StorageService.js";
 
 const CHAPTERS_DIR_NAMES = ["chapters"];
 const CHARACTERS_DIR_NAMES = ["charators", "characters"];
@@ -49,29 +50,53 @@ export class StoryLibraryService {
       chapters.sort((a, b) => a.pageNumber - b.pageNumber);
     }
 
+    // The cast is defined by files in charators/: a per-character description (<key>.md,
+    // the Alice pattern) and/or a legacy on-disk image. Reference images now live in GCS
+    // (casts/<storyId>/<key>.*), so a character defined only by its .md still counts.
     const characters: StoryLibraryCharacter[] = [];
     if (charsDir) {
-      const imgFiles = fs.readdirSync(charsDir).filter((f) => /\.(png|jpe?g)$/i.test(f));
-      for (const f of imgFiles) {
-        const key = path.basename(f, path.extname(f)).trim().toLowerCase();
+      const files = fs.readdirSync(charsDir).filter((f) => /\.(png|jpe?g|md)$/i.test(f));
+      const keys = new Set<string>();
+      for (const f of files) keys.add(path.basename(f, path.extname(f)).trim().toLowerCase());
+      for (const key of [...keys].sort()) {
         characters.push({ key, displayName: this.titleCase(key) });
       }
-      characters.sort((a, b) => a.key.localeCompare(b.key));
     }
 
     return {
       id,
       title: this.deriveTitle(id),
       numberOfPages: chapters.length,
+      tags: this.readTags(storyDir),
       characters,
       chapters
     };
   }
 
   /**
-   * Reads a character reference sheet image as base64 for use as a generation reference
+   * Reads optional theme/genre tags from a `tags.txt` file in the story folder
+   * (one comma- or newline-separated list, e.g. "Classic, Adventure, Friendship").
    */
-  public getCharacterImageBase64(storyId: string, key: string): { mime: string; data: string } | null {
+  private readTags(storyDir: string): string[] {
+    const tagsPath = path.join(storyDir, "tags.txt");
+    if (!fs.existsSync(tagsPath)) return [];
+    return fs.readFileSync(tagsPath, "utf-8")
+      .split(/[,\n]/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Reads a character reference image as base64 for use as a generation reference.
+   * Cloud-first: fetches casts/<storyId>/<key>.* from GCS, falling back to any legacy
+   * on-disk image (e.g. Alice's original cast).
+   */
+  public async getCharacterImageBase64(storyId: string, key: string): Promise<{ mime: string; data: string } | null> {
+    const gcsPath = await this.getCharacterGcsPath(storyId, key);
+    if (gcsPath) {
+      const ref = await storageService.getObjectAsReference(gcsPath);
+      if (ref) return ref;
+    }
     const filePath = this.findCharacterFile(storyId, key);
     if (!filePath) return null;
     const buffer = fs.readFileSync(filePath);
@@ -80,10 +105,36 @@ export class StoryLibraryService {
   }
 
   /**
-   * Resolves the on-disk path to a character reference sheet image (for direct file streaming)
+   * Returns the GCS object path of a cast reference image (casts/<storyId>/<key>.*), or null.
+   */
+  public async getCharacterGcsPath(storyId: string, key: string): Promise<string | null> {
+    return storageService.findObjectByPrefix(`casts/${storyId}/${key.trim().toLowerCase()}.`);
+  }
+
+  /**
+   * Resolves the on-disk path to a legacy character reference image (for direct file streaming)
    */
   public getCharacterImagePath(storyId: string, key: string): string | null {
     return this.findCharacterFile(storyId, key);
+  }
+
+  /**
+   * Reads a cast character's reference-sheet prompt from charators/<key>.md, if one exists.
+   * This is the exact prompt used to generate that character's sheet. Returns null when the
+   * character is defined only by an image (e.g. Alice) with no accompanying .md.
+   */
+  public getCharacterDescription(storyId: string, key: string): string | null {
+    const storyDir = path.join(this.storiesRoot, storyId);
+    const charsDir = this.findSubdir(storyDir, CHARACTERS_DIR_NAMES);
+    if (!charsDir) return null;
+
+    const normalizedKey = key.trim().toLowerCase();
+    const files = fs.readdirSync(charsDir).filter((f) => /\.md$/i.test(f));
+    const match = files.find((f) => path.basename(f, path.extname(f)).trim().toLowerCase() === normalizedKey);
+    if (!match) return null;
+
+    const content = fs.readFileSync(path.join(charsDir, match), "utf-8").trim();
+    return content || null;
   }
 
   /**

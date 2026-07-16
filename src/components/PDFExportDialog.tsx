@@ -5,6 +5,7 @@
 
 import React, { useState } from "react";
 import { Book } from "../types.js";
+import { personalizeStoryText } from "../utils/personalize.js";
 import { FileDown, Archive, Sparkles, CheckCircle, AlertCircle, FileText } from "lucide-react";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
@@ -98,7 +99,7 @@ export default function PDFExportDialog({ book }: PDFExportDialogProps) {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(16);
         
-        const splitText = doc.splitTextToSize(page.storyText, 320);
+        const splitText = doc.splitTextToSize(personalizeStoryText(page.storyText, book.childName), 320);
         doc.text(splitText, 440, 180);
 
         // Page numbering
@@ -136,7 +137,7 @@ export default function PDFExportDialog({ book }: PDFExportDialogProps) {
 
       book.pages.forEach((p) => {
         txtContent += `PAGE ${p.pageNumber}:\n`;
-        txtContent += `${p.storyText}\n`;
+        txtContent += `${personalizeStoryText(p.storyText, book.childName)}\n`;
         txtContent += `Illustration prompt used: ${p.illustrationPrompt}\n`;
         txtContent += `-------------------------------------\n\n`;
       });

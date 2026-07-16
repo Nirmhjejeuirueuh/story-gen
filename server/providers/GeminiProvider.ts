@@ -61,37 +61,42 @@ export class GeminiProvider {
    * Falls back to high-quality procedural SVG/canvas art if API fails (e.g. key limits)
    */
   public async generateImage(prompt: string, style: IllustrationStyle): Promise<string> {
-    try {
-      const ai = this.getAI();
-      console.log(`Attempting Gemini image generation for: "${prompt.slice(0, 60)}..."`);
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite-image",
-        contents: {
-          parts: [{ text: prompt }]
-        },
-        config: {
-          imageConfig: {
-            aspectRatio: "1:1"
-          }
-        }
-      });
+    // Gemini occasionally returns a response with NO inline image (text-only), which previously
+    // dropped straight to a procedural placeholder — the cause of intermittent blank pages.
+    // Retry a few times on both thrown errors and empty results before falling back.
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const ai = this.getAI();
+        console.log(`Attempting Gemini image generation (attempt ${attempt}/${maxAttempts}) for: "${prompt.slice(0, 60)}..."`);
+        const response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite-image",
+          contents: { parts: [{ text: prompt }] },
+          config: { imageConfig: { aspectRatio: "1:1" } }
+        });
 
-      // Search parts for inlineData
-      if (response && response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData && part.inlineData.data) {
-            const mime = part.inlineData.mimeType || "image/png";
-            return `data:${mime};base64,${part.inlineData.data}`;
+        if (response && response.candidates?.[0]?.content?.parts) {
+          for (const part of response.candidates[0].content.parts) {
+            if (part.inlineData && part.inlineData.data) {
+              const mime = part.inlineData.mimeType || "image/png";
+              return `data:${mime};base64,${part.inlineData.data}`;
+            }
           }
         }
+        console.warn(`No inline image data in Gemini response (attempt ${attempt}/${maxAttempts}).`);
+      } catch (error: any) {
+        console.error(`Gemini image generation failed (attempt ${attempt}/${maxAttempts}):`, error.message || error);
       }
-      console.warn("No inline image data found in Gemini response parts. Falling back to procedurally designed scene.");
-    } catch (error: any) {
-      console.error("Gemini image generation failed (likely free tier or quota limit). Falling back to procedural design. Error:", error.message || error);
+      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, attempt * 800));
     }
 
-    // High quality procedural SVG/Canvas image generator as a fail-safe
-    return this.createProceduralIllustration(prompt, style);
+    // Do NOT silently substitute a procedural placeholder here: returning a valid data URI would
+    // make the caller (QueueService) treat the page as successfully "Completed", leaving an emoji-
+    // on-gradient placeholder that the user then has to notice and regenerate by hand. Throwing lets
+    // QueueService's own retry loop re-run the whole job, and — if it still fails — mark the page
+    // "Failed" so the UI surfaces a retry instead of a fake-complete placeholder. The procedural art
+    // is still available via the explicit imageProvider === "procedural" mode (called directly).
+    throw new Error("Gemini returned no image after retries.");
   }
 
   /**
@@ -108,39 +113,43 @@ export class GeminiProvider {
       return this.generateImage(prompt, style);
     }
 
-    try {
-      const ai = this.getAI();
-      console.log(`Attempting Gemini reference-conditioned image generation (${referenceImages.length} refs) for: "${prompt.slice(0, 60)}..."`);
+    const parts: any[] = referenceImages.map((ref) => ({
+      inlineData: { mimeType: ref.mime, data: ref.data }
+    }));
+    parts.push({ text: prompt });
 
-      const parts: any[] = referenceImages.map((ref) => ({
-        inlineData: { mimeType: ref.mime, data: ref.data }
-      }));
-      parts.push({ text: prompt });
+    // Retry on thrown errors and empty (image-less) responses before falling back, so a
+    // one-off Gemini miss doesn't leave a blank page.
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const ai = this.getAI();
+        console.log(`Attempting Gemini reference-conditioned image generation (${referenceImages.length} refs, attempt ${attempt}/${maxAttempts}) for: "${prompt.slice(0, 60)}..."`);
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite-image",
-        contents: { parts },
-        config: {
-          imageConfig: {
-            aspectRatio: "1:1"
+        const response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite-image",
+          contents: { parts },
+          config: { imageConfig: { aspectRatio: "1:1" } }
+        });
+
+        if (response && response.candidates?.[0]?.content?.parts) {
+          for (const part of response.candidates[0].content.parts) {
+            if (part.inlineData && part.inlineData.data) {
+              const mime = part.inlineData.mimeType || "image/png";
+              return `data:${mime};base64,${part.inlineData.data}`;
+            }
           }
         }
-      });
-
-      if (response && response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData && part.inlineData.data) {
-            const mime = part.inlineData.mimeType || "image/png";
-            return `data:${mime};base64,${part.inlineData.data}`;
-          }
-        }
+        console.warn(`No inline image data in reference-conditioned response (attempt ${attempt}/${maxAttempts}).`);
+      } catch (error: any) {
+        console.error(`Gemini reference-conditioned generation failed (attempt ${attempt}/${maxAttempts}):`, error.message || error);
       }
-      console.warn("No inline image data found in Gemini reference-conditioned response. Falling back to procedurally designed scene.");
-    } catch (error: any) {
-      console.error("Gemini reference-conditioned image generation failed. Falling back to procedural design. Error:", error.message || error);
+      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, attempt * 800));
     }
 
-    return this.createProceduralIllustration(prompt, style);
+    // Throw rather than return a placeholder — see generateImage() above for the full rationale.
+    // A silent procedural fallback here is exactly what caused pages to finish as emoji placeholders.
+    throw new Error("Gemini returned no reference-conditioned image after retries.");
   }
 
   /**

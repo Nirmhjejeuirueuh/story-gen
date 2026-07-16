@@ -8,26 +8,45 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import apiRouter from "./server/routes/routes.js";
+import { db } from "./server/database/db.js";
+import { templateStore } from "./server/services/TemplateStore.js";
+import { storyStore } from "./server/services/StoryStore.js";
 
 // Load environment variables
 dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   const HOST = "0.0.0.0";
+
+  // Hydrate the in-memory cache from Firestore before serving any requests.
+  console.log("[Server] Initializing Firestore database...");
+  await db.init();
+
+  // P1 DB restructure: mirror the filesystem Story Library into Firestore storyTemplates
+  // (one-time seed when empty), then hydrate the in-memory cache that backs library reads.
+  // Non-breaking — the filesystem remains the seed source and read fallback.
+  await templateStore.seedFromFilesystem();
+  await templateStore.loadAll();
+
+  // P1 Slice 3: mirror books into the richer stories/{id} structure, then hydrate the read
+  // cache that now backs the book API. `books` stays write-primary; reads come from stories/.
+  await storyStore.mirrorAll();
+  await storyStore.hydrateCache();
 
   // Large limit for base64 photo uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  console.log("[Server] Mounting API Router at /api...");
-  app.use("/api", apiRouter);
-
-  // Health check
+  // Health check — declared before the API router so it stays public (the router auth-gates
+  // everything mounted under it).
   app.get("/api/health", (req, res) => {
     res.json({ status: "healthy", timestamp: new Date().toISOString() });
   });
+
+  console.log("[Server] Mounting API Router at /api...");
+  app.use("/api", apiRouter);
 
   // Serve static assets or mount Vite dev server middleware
   if (process.env.NODE_ENV !== "production") {

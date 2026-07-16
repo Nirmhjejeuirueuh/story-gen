@@ -4,13 +4,17 @@
  */
 
 import { IllustrationStyle } from "../../src/types.js";
+import { HOUSE_STYLE } from "../config/config.js";
 
 export class PromptEngine {
   /**
    * Generates a prompt for creating an official children's storybook character sheet.
+   * Rendered in the shared HOUSE_STYLE so the hero's reference matches the story pages
+   * (a sheet drawn in a different style is a major cause of the hero "drifting" between
+   * the approved sheet and the rendered illustrations).
    */
   public generateCharacterPrompt(name: string, age: number, gender: string, description: string): string {
-    return `Create a comprehensive character design reference sheet for a ${age}-year-old ${gender} named "${name}", in the style of a professional animation/game character model sheet, on a single clean neutral background.
+    return `Create a comprehensive character design reference sheet for a ${age}-year-old ${gender} named "${name}", rendered in this exact art style: ${HOUSE_STYLE}. Use a single clean neutral background.
 Character description and personality: ${description}
 
 The sheet must be a single image laid out in clearly labeled sections, all showing the exact same character with perfectly consistent face, hairstyle, hair color, eye color, skin tone, and clothing/costume colors throughout every section:
@@ -22,7 +26,26 @@ The sheet must be a single image laid out in clearly labeled sections, all showi
 5. POSE SHEET: A sequence of at least 4 labeled dynamic action poses relevant to the character's personality and story role, shown as clean line-art or lightly colored sketches with numbered steps.
 6. COSTUME DESIGN & DETAILS: Close-up callouts of the character's outfit pieces and accessories with small detail insets (zippers, patterns, badges, or props) and labels for each garment/accessory.
 
-Style constraints: Clean, highly polished, professional character-design-sheet style with defined outlines, vibrant but harmonious colors, clear section labels/headers in a legible font, and a well-organized grid layout (similar to official animation studio model sheets). Keep the character simple and charming enough to be easily replicated consistently across a children's storybook.`;
+Style constraints: Render every section in the house art style above (${HOUSE_STYLE}) with clear labeled sections and a well-organized grid layout. Keep the character simple, charming, and easy to reproduce consistently across a children's storybook.`;
+  }
+
+  /**
+   * Builds a full multi-view reference sheet prompt for a fixed-cast (Story Library) character,
+   * from its existing single-image description. Used on-demand for a richer DISPLAY sheet; the
+   * clean single reference image stays the actual generation reference for story pages.
+   */
+  public generateCastSheetPrompt(name: string, description: string): string {
+    return `Create a comprehensive character design reference sheet for the character "${name}", rendered in this exact art style: ${HOUSE_STYLE}. Use a single clean neutral white background, and keep the character perfectly consistent with the provided reference image.
+Character description: ${description}
+
+Lay out a single image in clearly labeled sections, all showing the exact same character with perfectly consistent face, colours, and costume throughout:
+1. TITLE HEADER: The character's name "${name}" at the top like a title card.
+2. THREE-VIEW DRAWING: Front view, side view, and back view in a neutral pose, labeled "FRONT VIEW", "SIDE VIEW", "BACK VIEW".
+3. EXPRESSION SHEET: A grid of at least 6 labeled facial expressions showing emotional range.
+4. POSE SHEET: At least 4 labeled dynamic action poses relevant to the character.
+5. DETAILS: Close-up callouts of the character's key features, outfit, or props with labels.
+
+Style constraints: render every section in the house art style above (${HOUSE_STYLE}), organized as a clean labeled grid.`;
   }
 
   /**

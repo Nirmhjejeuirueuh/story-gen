@@ -4,16 +4,35 @@
  */
 
 import React, { useState } from "react";
-import { Book } from "../types.js";
-import { BookOpen, Grid, ChevronLeft, ChevronRight, Sparkles, Image as ImageIcon } from "lucide-react";
+import { Book, BookPage } from "../types.js";
+import { personalizeStoryText } from "../utils/personalize.js";
+import { BookOpen, Grid, ChevronLeft, ChevronRight, Sparkles, Image as ImageIcon, Languages } from "lucide-react";
 
 interface BookPreviewProps {
   book: Book;
 }
 
+// Languages the reader can switch between. Only English is populated today (Slice 5 builds the
+// structure + UI; translations are generated on demand later). Others gracefully fall back to English.
+const SUPPORTED_LANGUAGES: { code: string; label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "ja", label: "日本語" },
+  { code: "es", label: "Español" },
+  { code: "fr", label: "Français" },
+  { code: "de", label: "Deutsch" },
+];
+
 export default function BookPreview({ book }: BookPreviewProps) {
   const [viewMode, setViewMode] = useState<"flip" | "grid">("flip");
   const [activeSpreadIndex, setActiveSpreadIndex] = useState(0); // 0 = Cover, 1 = Pages 1 & 2, 2 = Pages 3 & 4...
+  const [lang, setLang] = useState("en");
+
+  // Resolve a page's text in the active language, falling back to English/storyText, then personalize.
+  const pageText = (page: BookPage): string => {
+    const raw = page.texts?.[lang] ?? page.texts?.en ?? page.storyText;
+    return personalizeStoryText(raw, book.childName);
+  };
+  const isTranslated = (page: BookPage): boolean => lang === "en" || !!page.texts?.[lang];
 
   const totalSpreads = 1 + Math.ceil(book.pages.length / 2); // Cover + internal spreads
 
@@ -37,7 +56,23 @@ export default function BookPreview({ book }: BookPreviewProps) {
           <h4 className="font-bold text-slate-800 text-sm">Interactive Storybook Preview</h4>
           <p className="text-[11px] text-slate-400 font-medium">Behold your compiled children's masterpiece.</p>
         </div>
-        <div className="flex gap-1.5 bg-slate-200/60 p-1 rounded-xl">
+        <div className="flex items-center gap-2">
+          {/* Language switcher (texts{} multi-language) */}
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5">
+            <Languages className="h-3.5 w-3.5 text-emerald-600" />
+            <select
+              value={lang}
+              onChange={(e) => setLang(e.target.value)}
+              className="text-xs font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+              title="Reading language"
+            >
+              {SUPPORTED_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-1.5 bg-slate-200/60 p-1 rounded-xl">
           <button
             onClick={() => setViewMode("flip")}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
@@ -54,6 +89,7 @@ export default function BookPreview({ book }: BookPreviewProps) {
           >
             <Grid className="h-3.5 w-3.5" /> Thumbnail Grid
           </button>
+          </div>
         </div>
       </div>
 
@@ -140,10 +176,13 @@ export default function BookPreview({ book }: BookPreviewProps) {
                       }
                       return (
                         <>
-                          <div className="flex-1 p-6 md:p-8 flex items-center justify-center">
+                          <div className="flex-1 p-6 md:p-8 flex flex-col items-center justify-center gap-2">
                             <p className="text-slate-700 font-medium text-sm md:text-base leading-relaxed text-center">
-                              {page.storyText}
+                              {pageText(page)}
                             </p>
+                            {!isTranslated(page) && (
+                              <span className="text-[10px] text-slate-400 italic">Showing English — not translated yet</span>
+                            )}
                           </div>
                           <div className="p-3 bg-white text-center border-t border-slate-100 text-xs font-bold text-slate-400">
                             Page {pageNum}
@@ -223,7 +262,7 @@ export default function BookPreview({ book }: BookPreviewProps) {
               </div>
               <div className="p-3 bg-slate-50/50 border-t border-slate-100">
                 <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed text-center">
-                  {p.storyText}
+                  {pageText(p)}
                 </p>
               </div>
             </div>

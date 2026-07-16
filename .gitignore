@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Runtime file-based "database" — regenerated on startup. Kept out of git because it holds
+# API keys (settings.geminiApiKey) and bloats the repo with inlined base64 images.
+data_db.json
+
+# Firebase Admin service account key — grants full admin access to Firestore. SECRET.
+serviceAccountKey.json
+**/serviceAccountKey.json
