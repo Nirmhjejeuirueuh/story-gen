@@ -26,93 +26,103 @@ export default function PDFExportDialog({ book }: PDFExportDialogProps) {
     setErrorMsg(null);
 
     try {
-      // Create jsPDF document: 800x500 landscape layout matching landscape book size
+      // Fixed 1:1 square print canvas (8.5x8.5in @ 72pt/in) — matches the on-screen BookPreview's
+      // square page ratio exactly, so the printed layout never diverges from what was previewed.
+      const SIZE = 612;
+      const MARGIN = 44;
+      const CONTENT_W = SIZE - MARGIN * 2;
       const doc = new jsPDF({
-        orientation: "landscape",
         unit: "pt",
-        format: [800, 500],
+        format: [SIZE, SIZE],
       });
 
-      // 1. Draw cover page
-      doc.setFillColor(16, 185, 129); // Emerald cover fill
-      doc.rect(0, 0, 800, 500, "F");
+      // 1. Draw cover page (square)
+      doc.setFillColor(109, 68, 23); // Warm brown, matches CoverFace gradient midtone
+      doc.rect(0, 0, SIZE, SIZE, "F");
+      doc.setDrawColor(230, 200, 150);
+      doc.setLineWidth(1.5);
+      doc.rect(14, 14, SIZE - 28, SIZE - 28);
 
-      // Draw spine lines
-      doc.setDrawColor(4, 120, 87);
-      doc.setLineWidth(5);
-      doc.line(10, 0, 10, 500);
-
-      // Book Titles
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(36);
-      doc.text(book.title, 400, 180, { align: "center" });
+      doc.setFontSize(30);
+      doc.text(doc.splitTextToSize(book.title, CONTENT_W), SIZE / 2, SIZE / 2 - 60, { align: "center" });
 
       doc.setFont("helvetica", "italic");
-      doc.setFontSize(18);
-      doc.text(book.coverTitle || "", 400, 220, { align: "center" });
+      doc.setFontSize(15);
+      doc.text(doc.splitTextToSize(book.coverTitle || "", CONTENT_W), SIZE / 2, SIZE / 2, { align: "center" });
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(24);
-      doc.text("📖", 400, 300, { align: "center" });
+      doc.setFontSize(28);
+      doc.text("📖", SIZE / 2, SIZE / 2 + 70, { align: "center" });
 
-      doc.setFontSize(12);
-      doc.text(`Starring: ${book.childName}  •  Style: ${book.style}`, 400, 420, { align: "center" });
+      doc.setFontSize(11);
+      doc.text(`Starring ${book.childName}`, SIZE / 2, SIZE - 50, { align: "center" });
 
-      // 2. Loop through pages and add to PDF
+      // 2. Loop through pages — one square PDF page per book page, text stacked with the
+      // illustration (never side-by-side), alternating top/bottom exactly like BookPreview's
+      // textOnTop rule so the printed spread matches what the reader saw on screen.
       for (const page of book.pages) {
-        doc.addPage([800, 500], "landscape");
+        doc.addPage([SIZE, SIZE]);
+        doc.setFillColor(246, 239, 221); // Parchment
+        doc.rect(0, 0, SIZE, SIZE, "F");
 
-        // Split sheet into left half (image) and right half (story text)
-        doc.setFillColor(248, 250, 252); // Soft gray left
-        doc.rect(0, 0, 400, 500, "F");
+        const textOnTop = Math.floor((page.pageNumber - 1) / 2) % 2 === 0;
+        const textZoneH = 210;
+        const textY = textOnTop ? MARGIN : SIZE - MARGIN - textZoneH;
+        const imageY = textOnTop ? textY + textZoneH + 16 : MARGIN;
+        const imageH = SIZE - MARGIN * 2 - textZoneH - 16;
 
-        // Set page text half on right
-        doc.setFillColor(255, 255, 255); // White right
-        doc.rect(400, 0, 400, 500, "F");
-
-        // Draw image on left
-        if (page.imageUrl) {
-          try {
-            // Embed image
-            doc.addImage(page.imageUrl, "JPEG", 20, 40, 360, 360);
-          } catch (imgErr) {
-            console.warn(`Could not draw image for page ${page.pageNumber} in PDF. drawing placeholder.`, imgErr);
-            doc.setDrawColor(203, 213, 225);
-            doc.rect(20, 40, 360, 360);
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(12);
-            doc.setTextColor(148, 163, 184);
-            doc.text("Illustration Drawing placeholder", 200, 220, { align: "center" });
-          }
-        } else {
-          doc.setDrawColor(203, 213, 225);
-          doc.rect(20, 40, 360, 360);
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(12);
-          doc.setTextColor(148, 163, 184);
-          doc.text("No illustration compiled", 200, 220, { align: "center" });
+        // Chapter title, if authored for this page.
+        let textCursorY = textY + 20;
+        if (page.title) {
+          doc.setTextColor(91, 67, 33);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(15);
+          doc.text(doc.splitTextToSize(page.title, CONTENT_W), SIZE / 2, textCursorY, { align: "center" });
+          textCursorY += 30;
         }
 
-        // Draw page text on right
-        doc.setTextColor(30, 41, 59); // Charcoal
+        // Story text (HTML on screen; plain vector text here — same words, same page).
+        doc.setTextColor(58, 48, 36);
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(16);
-        
-        const splitText = doc.splitTextToSize(personalizeStoryText(page.storyText, book.childName), 320);
-        doc.text(splitText, 440, 180);
+        doc.setFontSize(13);
+        const splitText = doc.splitTextToSize(personalizeStoryText(page.storyText, book.childName), CONTENT_W);
+        doc.text(splitText, MARGIN, textCursorY);
+
+        // Illustration — text-free artwork, drawn in its own reserved region.
+        if (page.imageUrl) {
+          try {
+            doc.addImage(page.imageUrl, "JPEG", MARGIN, imageY, CONTENT_W, imageH);
+          } catch (imgErr) {
+            console.warn(`Could not draw image for page ${page.pageNumber} in PDF. drawing placeholder.`, imgErr);
+            doc.setDrawColor(203, 178, 130);
+            doc.rect(MARGIN, imageY, CONTENT_W, imageH);
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(11);
+            doc.setTextColor(160, 140, 100);
+            doc.text("Illustration drawing placeholder", SIZE / 2, imageY + imageH / 2, { align: "center" });
+          }
+        } else {
+          doc.setDrawColor(203, 178, 130);
+          doc.rect(MARGIN, imageY, CONTENT_W, imageH);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(11);
+          doc.setTextColor(160, 140, 100);
+          doc.text("No illustration compiled", SIZE / 2, imageY + imageH / 2, { align: "center" });
+        }
 
         // Page numbering
-        doc.setTextColor(148, 163, 184);
-        doc.setFontSize(10);
-        doc.text(`Page ${page.pageNumber}`, 600, 460, { align: "center" });
+        doc.setTextColor(160, 140, 100);
+        doc.setFontSize(9);
+        doc.text(`${page.pageNumber}`, SIZE / 2, SIZE - 18, { align: "center" });
       }
 
       // Save compiled PDF
       const filename = `${book.title.toLowerCase().replace(/\s+/g, "_")}_storybook.pdf`;
       doc.save(filename);
 
-      setSuccessMsg(`Your landscape children's book PDF "${filename}" compiled successfully!`);
+      setSuccessMsg(`Your square children's book PDF "${filename}" compiled successfully!`);
     } catch (error: any) {
       console.error("PDF compiling failed:", error);
       setErrorMsg("Failed to generate PDF document: " + error.message);
@@ -185,7 +195,7 @@ export default function PDFExportDialog({ book }: PDFExportDialogProps) {
           <FileText className="h-5 w-5 text-emerald-600" /> Print &amp; Compile storybook assets
         </h4>
         <p className="text-xs text-slate-500 mt-0.5">
-          Compile your final, approved storybook chapters into ready-to-print landscape files or raw archives.
+          Compile your final, approved storybook chapters into ready-to-print square-page files or raw archives.
         </p>
       </div>
 
@@ -236,7 +246,7 @@ export default function PDFExportDialog({ book }: PDFExportDialogProps) {
               {exportingPDF ? "Compiling PDF Book..." : "High-Res Storybook PDF"}
             </h5>
             <p className="text-xs text-slate-500 mt-1">
-              Creates a beautiful landscape presentation format containing your double-page spread layouts.
+              Creates a print-ready square-page PDF (8.5&times;8.5in) matching the on-screen book preview exactly.
             </p>
           </div>
         </button>
