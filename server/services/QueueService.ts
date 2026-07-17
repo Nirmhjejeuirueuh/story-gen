@@ -12,7 +12,6 @@ import { geminiProvider } from "../providers/GeminiProvider.js";
 import { openaiProvider } from "../providers/OpenAIProvider.js";
 import { storyLibraryService } from "./StoryLibraryService.js";
 import { storageService } from "./StorageService.js";
-import { storyStore } from "./StoryStore.js";
 import { db } from "../database/db.js";
 
 export class QueueService {
@@ -173,7 +172,6 @@ export class QueueService {
               imageStatus: "Failed",
               imageError: error.message || "Illustration generation failed."
             });
-            await storyStore.updatePage(job.payload.bookId, job.payload.pageNumber).catch(() => {});
           }
         } else {
           // Linear backoff wait
@@ -289,7 +287,6 @@ export class QueueService {
       coverTitle: storyResult.coverTitle || "An AI Personalized Story Book",
       pages
     });
-    await storyStore.syncBook(bookId).catch(() => {}); // dual-write generated pages to stories/
 
     await this.jobRepo.update(job.id, {
       status: "Completed",
@@ -310,7 +307,6 @@ export class QueueService {
     if (!page) throw new Error(`Book page ${pageNumber} not found.`);
 
     await this.bookRepo.updatePage(bookId, pageNumber, { imageStatus: "Generating" });
-    await storyStore.updatePage(bookId, pageNumber).catch(() => {});
     await this.jobRepo.update(job.id, { progress: 30 });
 
     const imageProvider = db.settings?.imageProvider || "gemini";
@@ -345,6 +341,10 @@ export class QueueService {
         }
         scenePrompt = scenePrompt.replace(/MAIN_CHARACTER/g, book.childName);
       }
+
+      // Story text is rendered separately as HTML in BookPreview, so the artwork must be
+      // text-free. Guard the hand-authored scene prompt the same way template prompts are.
+      scenePrompt = promptEngine.withNoText(scenePrompt);
 
       await this.jobRepo.update(job.id, { progress: 50 });
 
@@ -420,7 +420,6 @@ export class QueueService {
       imageUrl,
       imageStatus: "Completed"
     });
-    await storyStore.updatePage(bookId, pageNumber).catch(() => {}); // dual-write completed page
 
     await this.jobRepo.update(job.id, {
       status: "Completed",
