@@ -33,13 +33,12 @@ import StoryEditor from "./components/StoryEditor.tsx";
 import BookPreview from "./components/BookPreview.tsx";
 import ImageGenerationStatus from "./components/ImageGenerationStatus.tsx";
 import PDFExportDialog from "./components/PDFExportDialog.tsx";
-import TemplateConfig from "./components/TemplateConfig.tsx";
 import SystemSettings from "./components/SystemSettings.tsx";
 import StoryLibraryBrowser from "./components/StoryLibraryBrowser.tsx";
 import { useAuth } from "./auth/AuthContext.tsx";
 import { DEFAULT_STYLES } from "../server/config/config.js";
 
-type Tab = "dashboard" | "wizard" | "books" | "templates" | "characters" | "jobs" | "settings" | "library";
+type Tab = "dashboard" | "wizard" | "books" | "characters" | "jobs" | "settings" | "library";
 
 export default function App() {
   // Authenticated user (drives admin-only UI + the sign-out control)
@@ -239,37 +238,20 @@ export default function App() {
 
   // --- ACTIONS ---
 
-  // Custom template save / delete
-  const handleSaveTemplate = async (template: StoryTemplate) => {
-    try {
-      await fetch("/api/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(template),
-      });
-      fetchTemplates();
-    } catch (err) {
-      console.error("Failed to save template:", err);
-    }
-  };
-
-  const handleDeleteTemplate = async (id: string) => {
-    try {
-      await fetch(`/api/templates/${id}`, { method: "DELETE" });
-      fetchTemplates();
-    } catch (err) {
-      console.error("Failed to delete template:", err);
-    }
-  };
-
   // Delete books
   const handleDeleteBook = async (id: string) => {
     try {
-      await fetch(`/api/books/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/books/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "Couldn't delete this storybook. You can only delete books you created yourself.");
+        return;
+      }
       fetchBooks();
       if (activeBook?.id === id) setActiveBook(null);
     } catch (err) {
       console.error("Failed to delete book:", err);
+      alert("Couldn't delete this storybook — check your connection and try again.");
     }
   };
 
@@ -1407,22 +1389,6 @@ export default function App() {
                   ))}
                 </div>
               )}
-            </motion.div>
-          )}
-
-          {/* --- TAB 4: TEMPLATE CONFIGS --- */}
-          {activeTab === "templates" && (
-            <motion.div
-              key="templates-tab"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-            >
-              <TemplateConfig
-                templates={templates}
-                onSaveTemplate={handleSaveTemplate}
-                onDeleteTemplate={handleDeleteTemplate}
-              />
             </motion.div>
           )}
 

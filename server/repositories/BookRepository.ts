@@ -66,22 +66,4 @@ export class BookRepository {
     const template = db.templates.find(t => t.id === id);
     return template || null;
   }
-
-  public async saveTemplate(template: StoryTemplate): Promise<StoryTemplate> {
-    const index = db.templates.findIndex(t => t.id === template.id);
-    if (index !== -1) {
-      db.templates[index] = template;
-    } else {
-      db.templates.push(template);
-    }
-    await db.upsert("templates", template.id, template);
-    return template;
-  }
-
-  public async deleteTemplate(id: string): Promise<boolean> {
-    const initialLength = db.templates.length;
-    db.templates = db.templates.filter(t => t.id !== id);
-    await db.remove("templates", id);
-    return db.templates.length < initialLength;
-  }
 }
