@@ -6,14 +6,178 @@
 import { Request, Response } from "express";
 import { storyLibraryService } from "../services/StoryLibraryService.js";
 import { templateStore } from "../services/TemplateStore.js";
+import { layoutPlanStore } from "../services/LayoutPlanStore.js";
 import { storageService } from "../services/StorageService.js";
 import { geminiProvider } from "../providers/GeminiProvider.js";
 import { openaiProvider } from "../providers/OpenAIProvider.js";
 import { promptEngine } from "../providers/PromptEngine.js";
 import { db } from "../database/db.js";
-import { IllustrationStyle } from "../../src/types.js";
+import { IllustrationStyle, TemplatePageDoc } from "../../src/types.js";
+import { DEFAULT_LAYOUT_PLAN_ID } from "../config/layouts.js";
 
 export class StoryLibraryController {
+  /** The catalogue of page layouts the AI/editor can choose from (served for the editor UI). */
+  public listLayouts = async (_req: Request, res: Response): Promise<void> => {
+    res.status(200).json(layoutPlanStore.getLayouts());
+  };
+
+  /**
+   * REDESIGN — "Generate Pages". For a story TEMPLATE, asks the text model to write, per
+   * page: story text + a chosen layout + a scene illustration prompt + which cast appears. Stores
+   * the result in storyTemplates/{id}/pages (replacing any existing pages). Does NOT generate
+   * images — those are generated per page, on demand, afterwards.
+   */
+  public generatePages = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const story = templateStore.getStory(id) ?? storyLibraryService.getStory(id);
+      if (!story) {
+        res.status(404).json({ error: "Story library entry not found." });
+        return;
+      }
+
+      const requested = Number(req.body?.numPages);
+      const numPages = Number.isFinite(requested) && requested > 0 ? Math.min(requested, 40) : story.numberOfPages || 20;
+      const cast = story.characters.map((c) => ({ key: c.key, name: c.displayName }));
+      const castKeys = new Set(cast.map((c) => c.key));
+
+      const prompt = promptEngine.generatePagesPrompt(
+        story.title,
+        cast,
+        numPages,
+        layoutPlanStore.getLayouts().map((l) => ({ layoutId: l.layoutId, name: l.name }))
+      );
+
+      const textProvider = db.settings?.textProvider || "gemini";
+      const jsonText = textProvider === "openai"
+        ? await openaiProvider.generateText(prompt, "You are a specialized JSON children's picture-book writer.", true)
+        : await geminiProvider.generateText(prompt, "You are a specialized JSON children's picture-book writer.", true);
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(jsonText.replace(/```json/gi, "").replace(/```/g, "").trim());
+      } catch {
+        res.status(502).json({ error: "Page generation output was not valid JSON. Please try again." });
+        return;
+      }
+
+      const pages: TemplatePageDoc[] = (parsed.pages || [])
+        .map((p: any, i: number) => ({
+          pageNumber: Number(p.pageNumber) || i + 1,
+          storyText: String(p.storyText || "").trim(),
+          illustrationPrompt: String(p.illustrationPrompt || "").trim(),
+          // Keep only real cast keys the model returned; ignore anything it invented.
+          characterKeys: Array.isArray(p.characterKeys)
+            ? p.characterKeys.map((k: any) => String(k).trim().toLowerCase()).filter((k: string) => castKeys.has(k))
+            : [],
+          layoutId: layoutPlanStore.getLayoutById(Number(p.layoutId)).layoutId,
+        }))
+        .sort((a: TemplatePageDoc, b: TemplatePageDoc) => a.pageNumber - b.pageNumber);
+
+      if (pages.length === 0) {
+        res.status(502).json({ error: "Page generation returned no pages. Please try again." });
+        return;
+      }
+
+      await templateStore.writePages(id, pages, DEFAULT_LAYOUT_PLAN_ID);
+      res.status(200).json({ success: true, pages });
+    } catch (error: any) {
+      console.error("[StoryLibraryController] Error generating pages:", error);
+      res.status(500).json({ error: "Failed to generate pages: " + error.message });
+    }
+  };
+
+  /** Returns the generated pages (text, prompt, layout, image) for a template, for the editor. */
+  public getPages = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const pages = templateStore.getPages(id);
+      if (pages === null) {
+        res.status(404).json({ error: "No generated pages for this story yet." });
+        return;
+      }
+      res.status(200).json(pages);
+    } catch (error: any) {
+      console.error("[StoryLibraryController] Error listing pages:", error);
+      res.status(500).json({ error: "Failed to list pages: " + error.message });
+    }
+  };
+
+  /** Edits one generated page's story text, illustration prompt, and/or chosen layout. */
+  public updatePage = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id, pageNumber } = req.params;
+      const { storyText, illustrationPrompt, layoutId } = req.body || {};
+      const patch: Partial<TemplatePageDoc> = {};
+      if (typeof storyText === "string") patch.storyText = storyText;
+      if (typeof illustrationPrompt === "string") patch.illustrationPrompt = illustrationPrompt;
+      if (layoutId !== undefined) patch.layoutId = layoutPlanStore.getLayoutById(Number(layoutId)).layoutId;
+      if (Object.keys(patch).length === 0) {
+        res.status(400).json({ error: "Nothing to update." });
+        return;
+      }
+
+      const updated = await templateStore.updatePage(id, Number(pageNumber), patch);
+      if (!updated) {
+        res.status(404).json({ error: "Page not found (generate pages first)." });
+        return;
+      }
+      res.status(200).json({ success: true, page: updated });
+    } catch (error: any) {
+      console.error("[StoryLibraryController] Error updating page:", error);
+      res.status(500).json({ error: "Failed to update page: " + error.message });
+    }
+  };
+
+  /**
+   * REDESIGN — generates ONE page's image WITH its story text baked in, composed per the page's
+   * chosen layout, conditioned on the cast reference sheets. Stores the image in GCS at the
+   * template level (reused across users) and records its URL on the page.
+   */
+  public generatePageImage = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id, pageNumber } = req.params;
+      const pageNum = Number(pageNumber);
+      const pages = templateStore.getPages(id);
+      const page = pages?.find((p) => p.pageNumber === pageNum);
+      if (!page) {
+        res.status(404).json({ error: "Page not found (generate pages first)." });
+        return;
+      }
+
+      const story = templateStore.getStory(id) ?? storyLibraryService.getStory(id);
+      const nameOf = (key: string) => story?.characters.find((c) => c.key === key)?.displayName || key;
+
+      // Condition on the referenced cast members' reference sheets so faces/costumes stay consistent.
+      const references = (await Promise.all(
+        (page.characterKeys || []).map((key) => storyLibraryService.getCharacterImageBase64(id, key))
+      )).filter((ref): ref is { mime: string; data: string } => !!ref);
+
+      const layout = layoutPlanStore.getLayoutById(page.layoutId);
+      const imagePrompt = promptEngine.buildTextPageImagePrompt(
+        page.storyText,
+        page.illustrationPrompt,
+        layout.prompt,
+        (page.characterKeys || []).map(nameOf)
+      );
+
+      const imageProvider = db.settings?.imageProvider || "gemini";
+      const dataUri = imageProvider === "openai"
+        ? await openaiProvider.generateImageWithReferences(imagePrompt, references)
+        : (imageProvider === "procedural"
+            ? geminiProvider.createProceduralIllustration(imagePrompt, IllustrationStyle.STORYBOOK)
+            : await geminiProvider.generateImageWithReferences(imagePrompt, references, IllustrationStyle.STORYBOOK));
+
+      const imageUrl = await storageService.uploadDataUri(dataUri, `pages/${id}/${pageNum}-${Date.now()}`);
+      await templateStore.updatePage(id, pageNum, { imageUrl });
+
+      res.status(200).json({ success: true, pageNumber: pageNum, imageUrl });
+    } catch (error: any) {
+      console.error("[StoryLibraryController] Error generating page image:", error);
+      res.status(500).json({ error: "Failed to generate page image: " + error.message });
+    }
+  };
+
   /**
    * Lists all filesystem-authored story library entries
    */
@@ -157,64 +321,4 @@ export class StoryLibraryController {
     }
   };
 
-  /**
-   * Streams a chapter's cached illustration directly from disk (server/stories/<id>/illustrations/)
-   */
-  public getChapterIllustration = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id, pageNumber } = req.params;
-      const filePath = storyLibraryService.getIllustrationPath(id, Number(pageNumber));
-      if (!filePath) {
-        res.status(404).json({ error: "No cached illustration found for this chapter yet." });
-        return;
-      }
-      res.sendFile(filePath);
-    } catch (error: any) {
-      console.error("[StoryLibraryController] Error streaming chapter illustration:", error);
-      res.status(500).json({ error: "Failed to load chapter illustration: " + error.message });
-    }
-  };
-
-  /**
-   * Generates (or regenerates) a chapter's illustration directly against the story template,
-   * conditioned on its referenced characters' reference sheets, and caches it to disk.
-   * Used from the Story Library browser so illustrations can be prepared/fixed before any
-   * personalized book is created.
-   */
-  public regenerateChapterIllustration = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id, pageNumber } = req.params;
-      const story = storyLibraryService.getStory(id);
-      if (!story) {
-        res.status(404).json({ error: "Story library entry not found." });
-        return;
-      }
-
-      const chapter = story.chapters.find((c) => c.pageNumber === Number(pageNumber));
-      if (!chapter) {
-        res.status(404).json({ error: "Chapter not found." });
-        return;
-      }
-
-      const referenceImages = (await Promise.all(
-        chapter.characterKeys.map((key) => storyLibraryService.getCharacterImageBase64(id, key))
-      )).filter((ref): ref is { mime: string; data: string } => !!ref);
-
-      const style = (req.body?.style as IllustrationStyle) || IllustrationStyle.STORYBOOK;
-      const imageProvider = db.settings?.imageProvider || "gemini";
-
-      const imageUrl = imageProvider === "openai"
-        ? await openaiProvider.generateImageWithReferences(chapter.illustrationPrompt, referenceImages)
-        : (imageProvider === "procedural"
-            ? geminiProvider.createProceduralIllustration(chapter.illustrationPrompt, style)
-            : await geminiProvider.generateImageWithReferences(chapter.illustrationPrompt, referenceImages, style));
-
-      storyLibraryService.saveIllustration(id, Number(pageNumber), imageUrl);
-
-      res.status(200).json({ success: true, pageNumber: Number(pageNumber) });
-    } catch (error: any) {
-      console.error("[StoryLibraryController] Error regenerating chapter illustration:", error);
-      res.status(500).json({ error: "Failed to regenerate chapter illustration: " + error.message });
-    }
-  };
 }

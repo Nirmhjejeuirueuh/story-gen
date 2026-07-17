@@ -5,7 +5,10 @@
 
 import React, { useEffect, useState } from "react";
 import { StoryLibraryEntry } from "../types.js";
-import { Library, Sparkles, Users, Images, ChevronDown, ChevronUp, RefreshCw, ImageOff, Tag, X, Loader2, FileText } from "lucide-react";
+import {
+  Library, Sparkles, Users, ChevronDown, ChevronUp, Tag, X, Loader2, FileText, Wand2,
+  Save, Image as ImageIcon,
+} from "lucide-react";
 
 interface SelectedCharacter {
   storyId: string;
@@ -21,6 +24,16 @@ interface CharacterDetail {
   displaySheetImageUrl: string | null;
 }
 
+/** One generated template page (server shape: TemplatePageDoc). Layout is AI-chosen, not user-editable. */
+interface TemplatePage {
+  pageNumber: number;
+  storyText: string;
+  illustrationPrompt: string;
+  characterKeys?: string[];
+  layoutId?: number;
+  imageUrl?: string;
+}
+
 interface StoryLibraryBrowserProps {
   onCreate: (libraryStoryId: string) => void;
   isCreating?: boolean;
@@ -30,9 +43,18 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
   const [stories, setStories] = useState<StoryLibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingId, setCreatingId] = useState<string | null>(null);
+
+  // The single "Generate" accordion (any signed-in user): which story's page list is open, its pages,
+  // and per-page editor state. Only one story's panel is open at a time.
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [regenerating, setRegenerating] = useState<string | null>(null); // `${storyId}:${pageNumber}`
-  const [cacheBust, setCacheBust] = useState<Record<string, number>>({});
+  const [pages, setPages] = useState<TemplatePage[]>([]);
+  const [pagesLoading, setPagesLoading] = useState(false);
+  const [pagesError, setPagesError] = useState<string | null>(null);
+  const [generatingPages, setGeneratingPages] = useState(false);
+  const [expandedPage, setExpandedPage] = useState<number | null>(null);
+  const [savingPage, setSavingPage] = useState<number | null>(null);
+  const [imagingPage, setImagingPage] = useState<number | null>(null);
+  const [pageMsg, setPageMsg] = useState<Record<number, { text: string; error?: boolean }>>({});
 
   // Cast preview pop-up: the clicked character, plus its fetched sheet prompt / image flag.
   const [selectedChar, setSelectedChar] = useState<SelectedCharacter | null>(null);
@@ -101,36 +123,90 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
     onCreate(id);
   };
 
-  const chapterKey = (storyId: string, pageNumber: number) => `${storyId}:${pageNumber}`;
-
-  const handleRegenerateIllustration = async (storyId: string, pageNumber: number) => {
-    const key = chapterKey(storyId, pageNumber);
-    setRegenerating(key);
+  // Toggles the single "Generate" accordion for a story, loading its generated pages on open.
+  const toggleGenerate = async (story: StoryLibraryEntry) => {
+    if (expandedId === story.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(story.id);
+    setExpandedPage(null);
+    setPagesError(null);
+    setPageMsg({});
+    setPagesLoading(true);
     try {
-      const res = await fetch(`/api/story-library/${storyId}/chapters/${pageNumber}/regenerate-illustration`, {
+      const res = await fetch(`/api/story-library/${story.id}/pages`);
+      setPages(res.ok ? await res.json() : []);
+    } catch {
+      setPages([]);
+      setPagesError("Couldn't load pages.");
+    } finally {
+      setPagesLoading(false);
+    }
+  };
+
+  const handleGeneratePages = async (story: StoryLibraryEntry) => {
+    if (pages.length > 0 && !window.confirm("Regenerate all pages? This replaces the current text and prompts (generated images are cleared).")) return;
+    setGeneratingPages(true);
+    setPagesError(null);
+    try {
+      const res = await fetch(`/api/story-library/${story.id}/generate-pages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ numPages: story.numberOfPages }),
       });
-      if (!res.ok) throw new Error("Regeneration failed");
-
-      setStories((prev) =>
-        prev.map((s) =>
-          s.id !== storyId
-            ? s
-            : {
-                ...s,
-                chapters: s.chapters.map((c) =>
-                  c.pageNumber === pageNumber ? { ...c, hasIllustration: true } : c
-                ),
-              }
-        )
-      );
-      setCacheBust((prev) => ({ ...prev, [key]: Date.now() }));
-    } catch (err) {
-      console.error("Failed to regenerate chapter illustration:", err);
+      const data = res.ok ? await res.json() : null;
+      if (!data?.pages) throw new Error("failed");
+      setPages(data.pages);
+    } catch {
+      setPagesError("Page generation failed. Check the text provider in System Settings and try again.");
     } finally {
-      setRegenerating(null);
+      setGeneratingPages(false);
+    }
+  };
+
+  const patchPageLocal = (pageNumber: number, patch: Partial<TemplatePage>) =>
+    setPages((prev) => prev.map((p) => (p.pageNumber === pageNumber ? { ...p, ...patch } : p)));
+
+  const savePage = async (storyId: string, page: TemplatePage) => {
+    setSavingPage(page.pageNumber);
+    setPageMsg((m) => ({ ...m, [page.pageNumber]: { text: "" } }));
+    try {
+      const res = await fetch(`/api/story-library/${storyId}/pages/${page.pageNumber}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storyText: page.storyText, illustrationPrompt: page.illustrationPrompt }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Save failed");
+      }
+      setPageMsg((m) => ({ ...m, [page.pageNumber]: { text: "Saved" } }));
+    } catch (err: any) {
+      setPageMsg((m) => ({ ...m, [page.pageNumber]: { text: err.message || "Save failed", error: true } }));
+    } finally {
+      setSavingPage(null);
+    }
+  };
+
+  const generatePageImage = async (storyId: string, page: TemplatePage) => {
+    setImagingPage(page.pageNumber);
+    setPageMsg((m) => ({ ...m, [page.pageNumber]: { text: "" } }));
+    try {
+      // Persist any edits first so the image reflects the current text/prompt.
+      await fetch(`/api/story-library/${storyId}/pages/${page.pageNumber}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storyText: page.storyText, illustrationPrompt: page.illustrationPrompt }),
+      });
+      const res = await fetch(`/api/story-library/${storyId}/pages/${page.pageNumber}/generate-image`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.imageUrl) throw new Error(data?.error || "Image generation failed");
+      patchPageLocal(page.pageNumber, { imageUrl: `${data.imageUrl}${data.imageUrl.includes("?") ? "&" : "?"}v=${Date.now()}` });
+    } catch (err: any) {
+      setPageMsg((m) => ({ ...m, [page.pageNumber]: { text: err.message || "Image generation failed", error: true } }));
+    } finally {
+      setImagingPage(null);
     }
   };
 
@@ -201,6 +277,7 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
                             alt={c.displayName}
                             referrerPolicy="no-referrer"
                             className="h-6 w-6 rounded-full object-cover bg-white border border-slate-200"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
                           />
                           <span className="text-[10px] font-bold text-slate-600">{c.displayName}</span>
                         </button>
@@ -210,52 +287,120 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
                 )}
 
                 <button
-                  onClick={() => setExpandedId(expandedId === story.id ? null : story.id)}
-                  className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-lg py-1.5 transition"
+                  onClick={() => toggleGenerate(story)}
+                  title="Generate or edit this story's page text + illustrations"
+                  className="w-full flex items-center justify-center gap-1.5 text-[11px] font-black text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg py-1.5 transition"
                 >
-                  <Images className="h-3.5 w-3.5" />
-                  {expandedId === story.id ? "Hide Illustrations" : "View & Manage Illustrations"}
+                  <Wand2 className="h-3.5 w-3.5" /> Generate
                   {expandedId === story.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </button>
 
                 {expandedId === story.id && (
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    {story.chapters.map((chapter) => {
-                      const key = chapterKey(story.id, chapter.pageNumber);
-                      const isRegenerating = regenerating === key;
-                      const bust = cacheBust[key];
-                      return (
-                        <div
-                          key={chapter.pageNumber}
-                          className="border border-slate-200 rounded-lg overflow-hidden bg-slate-50 flex flex-col"
+                  <div className="space-y-2 pt-1">
+                    {pagesError && <p className="text-[11px] text-red-600 font-medium bg-red-50 border border-red-100 rounded-lg p-2">{pagesError}</p>}
+
+                    {pagesLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-400 py-4 justify-center">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Loading pages...
+                      </div>
+                    ) : pages.length === 0 ? (
+                      <div className="text-center py-4 space-y-2">
+                        <p className="text-[11px] text-slate-400">No pages yet for this story.</p>
+                        <button
+                          onClick={() => handleGeneratePages(story)}
+                          disabled={generatingPages}
+                          className="flex items-center gap-1.5 mx-auto text-[11px] font-bold text-white bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 rounded-lg px-3 py-1.5 transition"
                         >
-                          <div className="aspect-square w-full bg-slate-100 flex items-center justify-center overflow-hidden">
-                            {chapter.hasIllustration ? (
-                              <img
-                                src={`/api/story-library/${story.id}/chapters/${chapter.pageNumber}/illustration${bust ? `?v=${bust}` : ""}`}
-                                alt={`Chapter ${chapter.pageNumber} illustration`}
-                                referrerPolicy="no-referrer"
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <ImageOff className="h-5 w-5 text-slate-300" />
-                            )}
-                          </div>
-                          <div className="p-1.5 flex items-center justify-between gap-1">
-                            <span className="text-[10px] font-bold text-slate-500">Ch. {chapter.pageNumber}</span>
-                            <button
-                              onClick={() => handleRegenerateIllustration(story.id, chapter.pageNumber)}
-                              disabled={isRegenerating}
-                              title={chapter.hasIllustration ? "Regenerate illustration" : "Generate illustration"}
-                              className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-900 disabled:text-slate-400 px-1.5 py-0.5 rounded-md hover:bg-emerald-50 transition"
-                            >
-                              <RefreshCw className={`h-3 w-3 ${isRegenerating ? "animate-spin" : ""}`} />
-                              {isRegenerating ? "..." : chapter.hasIllustration ? "Redo" : "Generate"}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                          {generatingPages ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                          {generatingPages ? "Generating..." : "Generate Pages"}
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleGeneratePages(story)}
+                          disabled={generatingPages}
+                          className="w-full flex items-center justify-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-700 disabled:text-slate-300 py-1 transition"
+                        >
+                          {generatingPages ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                          {generatingPages ? "Regenerating all pages..." : "Regenerate all pages"}
+                        </button>
+
+                        {pages.map((page) => {
+                          const isOpen = expandedPage === page.pageNumber;
+                          return (
+                            <div key={page.pageNumber} className="border border-slate-200 rounded-lg overflow-hidden">
+                              <button
+                                onClick={() => setExpandedPage(isOpen ? null : page.pageNumber)}
+                                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 transition text-left"
+                              >
+                                <span className="flex items-center gap-1.5 min-w-0">
+                                  <span className="text-[10px] font-black text-slate-700 shrink-0">Pg {page.pageNumber}</span>
+                                  <span className="text-[10px] text-slate-400 truncate">{page.storyText || "(no text)"}</span>
+                                </span>
+                                <span className="flex items-center gap-1 shrink-0">
+                                  {page.imageUrl && <ImageIcon className="h-3 w-3 text-emerald-600" />}
+                                  {isOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
+                                </span>
+                              </button>
+
+                              {isOpen && (
+                                <div className="p-2.5 space-y-2 border-t border-slate-100">
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">Story text (rendered on the page)</label>
+                                    <textarea
+                                      value={page.storyText}
+                                      onChange={(e) => patchPageLocal(page.pageNumber, { storyText: e.target.value })}
+                                      rows={2}
+                                      className="w-full text-[11px] text-slate-700 border border-slate-200 rounded-md p-2 focus:outline-none focus:border-emerald-300 resize-y"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">Illustration prompt (scene)</label>
+                                    <textarea
+                                      value={page.illustrationPrompt}
+                                      onChange={(e) => patchPageLocal(page.pageNumber, { illustrationPrompt: e.target.value })}
+                                      rows={3}
+                                      className="w-full text-[11px] text-slate-700 border border-slate-200 rounded-md p-2 focus:outline-none focus:border-emerald-300 resize-y"
+                                    />
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => savePage(story.id, page)}
+                                      disabled={savingPage === page.pageNumber}
+                                      className="flex items-center gap-1 text-[10px] font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 rounded-md px-2 py-1 transition disabled:opacity-50"
+                                    >
+                                      {savingPage === page.pageNumber ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
+                                    </button>
+                                    <button
+                                      onClick={() => generatePageImage(story.id, page)}
+                                      disabled={imagingPage === page.pageNumber}
+                                      className="flex items-center gap-1 text-[10px] font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-md px-2 py-1 transition disabled:bg-slate-300"
+                                    >
+                                      {imagingPage === page.pageNumber ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                                      {imagingPage === page.pageNumber ? "Rendering..." : page.imageUrl ? "Regenerate Image" : "Generate Image"}
+                                    </button>
+                                  </div>
+
+                                  {pageMsg[page.pageNumber]?.text && (
+                                    <p className={`text-[10px] font-semibold ${pageMsg[page.pageNumber].error ? "text-red-600" : "text-emerald-700"}`}>
+                                      {pageMsg[page.pageNumber].text}
+                                    </p>
+                                  )}
+
+                                  {page.imageUrl && (
+                                    <div className="w-full aspect-square max-w-[200px] mx-auto bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
+                                      <img src={page.imageUrl} alt={`Page ${page.pageNumber}`} referrerPolicy="no-referrer" className="w-full h-full object-contain" />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
                   </div>
                 )}
               </div>

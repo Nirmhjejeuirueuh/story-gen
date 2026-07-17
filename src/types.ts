@@ -69,6 +69,7 @@ export interface Book {
 export interface BookPage {
   id: string;
   pageNumber: number;
+  title?: string; // optional chapter heading shown above the page text in BookPreview
   storyText: string; // canonical (English) text; kept for back-compat
   texts?: Record<string, string>; // language code -> text, e.g. { en: "...", ja: "..." }
   illustrationPrompt: string;
@@ -76,6 +77,10 @@ export interface BookPage {
   imageUrl?: string; // Generated image
   imageStatus: 'Queued' | 'Generating' | 'Completed' | 'Failed';
   imageError?: string;
+  // Manual text-position override saved from the Book Preview layout editor. Confined to a
+  // reserved zone (never over the illustration) so the fixed 1:1 print canvas is never at risk.
+  // Absent = automatic alternation (BookPreview's textOnTop rule) decides the position.
+  textZone?: 'top' | 'bottom';
   createdAt: string;
 }
 
@@ -115,14 +120,34 @@ export interface StoryTemplateDoc {
   pageCount: number;
   style: string;
   description?: string;
+  layoutPlanId?: string; // which LayoutPlan the AI draws page layouts from (default: "default")
   createdAt: string;
 }
 
 export interface TemplatePageDoc {
   pageNumber: number;
-  storyText: string;
+  storyText: string;        // narrative text baked INTO the page image during generation
   illustrationPrompt: string;
   characterKeys: string[];
+  layoutId?: number;        // the PageLayout chosen for this page (see server/config/layouts.ts)
+  imageUrl?: string;        // the generated page image (text baked in); pre-generated per template
+}
+
+// Firestore-backed LayoutPlan (mirrors the storyTemplates pattern above):
+//   layoutPlans/{planId}
+//   layoutPlans/{planId}/layouts/{layoutId}
+// `server/config/layouts.ts` remains the seed source + fallback (used if Firestore is empty or
+// unreachable), the same role the filesystem plays for storyTemplates.
+export interface LayoutPlanDoc {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface LayoutDoc {
+  layoutId: number;
+  name: string;
+  prompt: string;
 }
 
 export interface TemplateCharacterDoc {
@@ -134,66 +159,6 @@ export interface TemplateCharacterDoc {
   displaySheetImageUrl?: string; // optional generated multi-view pose sheet — DISPLAY only
   approved: boolean;
   createdAt: string;
-}
-
-// --- Firestore-backed generated Stories (P1 Slice 3 of the DB restructure) ---
-// stories/{id}                    (metadata + characterMap field)
-// stories/{id}/pages/{pageNumber} (texts{} multi-language, per-page status)
-// stories/{id}/characters/{charId}
-// stories/{id}/generation/status
-// Mirrors the existing `books` collection; books stay primary until reads are cut over.
-export interface StoryDoc {
-  id: string;
-  title: string;
-  description: string;
-  coverImageUrl: string;
-  coverPrompt: string;
-  style: string;
-  language: string[];
-  pageCount: number;
-  status: "draft" | "generating" | "completed";
-  templateId: string;
-  libraryStoryId: string | null;
-  createdBy: string | null;
-  characterMap: Record<string, string>; // role placeholder -> characterId, e.g. MAIN_CHARACTER -> main
-  // Compat fields so a stories/{id} doc round-trips losslessly back to the legacy Book shape
-  // while both models coexist (books stays write-primary during the migration).
-  childName: string;
-  characterId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface StoryPageDoc {
-  pageNumber: number;
-  title: string;
-  illustrationPrompt: string;
-  illustrationImageUrl: string;
-  texts: Record<string, string>; // language code -> text, e.g. { en: "..." }
-  characterIds: string[];
-  status: "Queued" | "Generating" | "Completed" | "Failed";
-  regeneratedCount: number;
-}
-
-export interface StoryCharacterDoc {
-  id: string;                      // "main" for the custom hero, else the cast key
-  role: string;                    // placeholder role, e.g. MAIN_CHARACTER or SHERE_KHAN
-  name: string;
-  type: "custom" | "template";
-  characterSheetImageUrl: string;
-  prompt: string | null;
-  approved: boolean;
-  style: string;
-  createdAt: string;
-}
-
-export interface GenerationStatusDoc {
-  characterSheetStatus: string;
-  storyStatus: string;
-  imagesStatus: string;
-  completedPages: number;
-  totalPages: number;
-  pdfStatus: string;
 }
 
 export enum JobType {

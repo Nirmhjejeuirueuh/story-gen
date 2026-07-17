@@ -10,7 +10,7 @@ import { createServer as createViteServer } from "vite";
 import apiRouter from "./server/routes/routes.js";
 import { db } from "./server/database/db.js";
 import { templateStore } from "./server/services/TemplateStore.js";
-import { storyStore } from "./server/services/StoryStore.js";
+import { layoutPlanStore } from "./server/services/LayoutPlanStore.js";
 
 // Load environment variables
 dotenv.config();
@@ -24,16 +24,16 @@ async function startServer() {
   console.log("[Server] Initializing Firestore database...");
   await db.init();
 
-  // P1 DB restructure: mirror the filesystem Story Library into Firestore storyTemplates
-  // (one-time seed when empty), then hydrate the in-memory cache that backs library reads.
-  // Non-breaking — the filesystem remains the seed source and read fallback.
+  // Mirror the filesystem Story Library into Firestore storyTemplates (one-time seed when empty),
+  // then hydrate the in-memory cache that backs library reads. The filesystem remains the seed
+  // source and read fallback. (Generated books live in the single `books` collection.)
   await templateStore.seedFromFilesystem();
   await templateStore.loadAll();
 
-  // P1 Slice 3: mirror books into the richer stories/{id} structure, then hydrate the read
-  // cache that now backs the book API. `books` stays write-primary; reads come from stories/.
-  await storyStore.mirrorAll();
-  await storyStore.hydrateCache();
+  // Same pattern for the LayoutPlan catalogue: seed once from the static config, then hydrate
+  // the cache. server/config/layouts.ts remains the seed source + fallback.
+  await layoutPlanStore.seedFromStatic();
+  await layoutPlanStore.loadAll();
 
   // Large limit for base64 photo uploads
   app.use(express.json({ limit: "50mb" }));

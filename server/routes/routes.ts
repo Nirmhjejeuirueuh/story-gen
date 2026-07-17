@@ -52,7 +52,6 @@ router.get("/images/*", async (req: Request, res: Response) => {
 // proxy above, they must stay outside the auth gate. The story-library LIST/detail and
 // regenerate routes below stay protected (they go through fetch, which carries the token).
 router.get("/story-library/:id/characters/:key/image", storyLibraryController.getCharacterImage);
-router.get("/story-library/:id/chapters/:pageNumber/illustration", storyLibraryController.getChapterIllustration);
 
 // --- AUTH GATE ---
 // Everything below this line requires a valid Firebase ID token. The image routes above stay
@@ -83,7 +82,14 @@ router.get("/story-library", storyLibraryController.listStories);
 router.get("/story-library/:id", storyLibraryController.getStory);
 router.get("/story-library/:id/characters/:key", storyLibraryController.getCharacterDetail);
 router.post("/story-library/:id/characters/:key/regenerate-sheet", storyLibraryController.regenerateCastSheet);
-router.post("/story-library/:id/chapters/:pageNumber/regenerate-illustration", storyLibraryController.regenerateChapterIllustration);
+
+// REDESIGN: template page generation + per-page editor + image generation. The shared story
+// templates are collaboratively editable by any signed-in user (owner + mentor), not admin-gated.
+router.get("/layouts", storyLibraryController.listLayouts);
+router.get("/story-library/:id/pages", storyLibraryController.getPages);
+router.post("/story-library/:id/generate-pages", storyLibraryController.generatePages);
+router.patch("/story-library/:id/pages/:pageNumber", storyLibraryController.updatePage);
+router.post("/story-library/:id/pages/:pageNumber/generate-image", storyLibraryController.generatePageImage);
 
 // Books Management
 router.post("/books", RequestValidator.validateBook, bookController.createBook);
@@ -94,16 +100,15 @@ router.put("/books/:id", bookController.updateBook);
 router.delete("/books/:id", bookController.deleteBook);
 router.get("/books/:id/pages", bookController.getBookPages);
 router.post("/books/:id/regenerate-story", bookController.regenerateStoryText);
+router.patch("/books/:id/pages/:pageNumber/layout", bookController.updatePageLayout);
 
 // Page Render batch / single
 router.post("/books/:id/generate", bookController.generateIllustrations);
 router.post("/pages/regenerate", bookController.regeneratePageIllustration);
 router.post("/books/:id/export", bookController.exportBook);
 
-// Configurable Templates Manager
+// Story-book template catalogue (feeds the custom photo-book wizard's template picker).
 router.get("/templates", bookController.getTemplates);
-router.post("/templates", bookController.saveTemplate);
-router.delete("/templates/:id", bookController.deleteTemplate);
 
 // System Settings Manager — admin only (holds the shared Gemini/OpenAI API keys).
 router.get("/settings", adminOnly, (req, res) => {

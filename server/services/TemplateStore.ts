@@ -25,6 +25,11 @@ import {
 
 const STYLE_DEFAULT = "Storybook";
 
+/** Firestore rejects `undefined`; a JSON round-trip drops undefined keys and keeps null. */
+function clean<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj));
+}
+
 export class TemplateStore {
   private db = getFirestore();
 
@@ -168,6 +173,46 @@ export class TemplateStore {
       // Non-fatal: the filesystem library still works, so a seed failure must not block startup.
       console.error("[TemplateStore] Failed to seed story templates from filesystem:", error);
     }
+  }
+
+  /** Raw generated page docs for a template (with layoutId/imageUrl), or null if not cached. */
+  getPages(storyId: string): TemplatePageDoc[] | null {
+    const entry = this.cache.get(storyId);
+    return entry ? [...entry.pages].sort((a, b) => a.pageNumber - b.pageNumber) : null;
+  }
+
+  /**
+   * REDESIGN: replaces a template's `pages` subcollection with a freshly generated set (from
+   * "Generate Pages"). Updates the template's pageCount + layoutPlanId and the in-memory cache.
+   * Character sheets (the `characters` subcollection) are left untouched.
+   */
+  async writePages(storyId: string, pages: TemplatePageDoc[], layoutPlanId: string): Promise<void> {
+    const storyRef = this.col().doc(storyId);
+    const existing = await storyRef.collection("pages").get();
+    const batch = this.db.batch();
+    existing.docs.forEach((d) => batch.delete(d.ref));
+    for (const page of pages) {
+      batch.set(storyRef.collection("pages").doc(String(page.pageNumber)), clean(page));
+    }
+    batch.set(storyRef, { pageCount: pages.length, layoutPlanId }, { merge: true });
+    await batch.commit();
+
+    const entry = this.cache.get(storyId);
+    if (entry) {
+      entry.pages = [...pages].sort((a, b) => a.pageNumber - b.pageNumber);
+      entry.template.pageCount = pages.length;
+      entry.template.layoutPlanId = layoutPlanId;
+    }
+  }
+
+  /** REDESIGN: merges a partial update into one generated page (edit text/prompt/layout/image). */
+  async updatePage(storyId: string, pageNumber: number, patch: Partial<TemplatePageDoc>): Promise<TemplatePageDoc | null> {
+    const storyRef = this.col().doc(storyId);
+    await storyRef.collection("pages").doc(String(pageNumber)).set(clean(patch), { merge: true });
+    const entry = this.cache.get(storyId);
+    const cached = entry?.pages.find((p) => p.pageNumber === pageNumber);
+    if (cached) Object.assign(cached, patch);
+    return cached ?? null;
   }
 
   /** Reads a single cast character doc, or null if it isn't in Firestore (caller falls back). */

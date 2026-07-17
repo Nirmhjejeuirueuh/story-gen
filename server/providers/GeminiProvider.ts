@@ -65,6 +65,7 @@ export class GeminiProvider {
     // dropped straight to a procedural placeholder — the cause of intermittent blank pages.
     // Retry a few times on both thrown errors and empty results before falling back.
     const maxAttempts = 3;
+    let lastFinishReason: string | null = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const ai = this.getAI();
@@ -83,7 +84,8 @@ export class GeminiProvider {
             }
           }
         }
-        console.warn(`No inline image data in Gemini response (attempt ${attempt}/${maxAttempts}).`);
+        lastFinishReason = response?.candidates?.[0]?.finishReason || null;
+        console.warn(`No inline image data in Gemini response (attempt ${attempt}/${maxAttempts}). finishReason=${lastFinishReason}`);
       } catch (error: any) {
         console.error(`Gemini image generation failed (attempt ${attempt}/${maxAttempts}):`, error.message || error);
       }
@@ -96,7 +98,11 @@ export class GeminiProvider {
     // QueueService's own retry loop re-run the whole job, and — if it still fails — mark the page
     // "Failed" so the UI surfaces a retry instead of a fake-complete placeholder. The procedural art
     // is still available via the explicit imageProvider === "procedural" mode (called directly).
-    throw new Error("Gemini returned no image after retries.");
+    throw new Error(
+      lastFinishReason === "PROHIBITED_CONTENT"
+        ? "Gemini's safety filter blocked this image (PROHIBITED_CONTENT) — try rewording the scene, e.g. avoid depicting a child alone/unsupervised."
+        : `Gemini returned no image after retries.${lastFinishReason ? ` (reason: ${lastFinishReason})` : ""}`
+    );
   }
 
   /**
@@ -121,6 +127,7 @@ export class GeminiProvider {
     // Retry on thrown errors and empty (image-less) responses before falling back, so a
     // one-off Gemini miss doesn't leave a blank page.
     const maxAttempts = 3;
+    let lastFinishReason: string | null = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const ai = this.getAI();
@@ -140,7 +147,8 @@ export class GeminiProvider {
             }
           }
         }
-        console.warn(`No inline image data in reference-conditioned response (attempt ${attempt}/${maxAttempts}).`);
+        lastFinishReason = response?.candidates?.[0]?.finishReason || null;
+        console.warn(`No inline image data in reference-conditioned response (attempt ${attempt}/${maxAttempts}). finishReason=${lastFinishReason}`);
       } catch (error: any) {
         console.error(`Gemini reference-conditioned generation failed (attempt ${attempt}/${maxAttempts}):`, error.message || error);
       }
@@ -149,7 +157,11 @@ export class GeminiProvider {
 
     // Throw rather than return a placeholder — see generateImage() above for the full rationale.
     // A silent procedural fallback here is exactly what caused pages to finish as emoji placeholders.
-    throw new Error("Gemini returned no reference-conditioned image after retries.");
+    throw new Error(
+      lastFinishReason === "PROHIBITED_CONTENT"
+        ? "Gemini's safety filter blocked this image (PROHIBITED_CONTENT) — try rewording the scene, e.g. avoid depicting a child alone/unsupervised."
+        : `Gemini returned no reference-conditioned image after retries.${lastFinishReason ? ` (reason: ${lastFinishReason})` : ""}`
+    );
   }
 
   /**
