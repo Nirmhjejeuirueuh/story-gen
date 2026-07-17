@@ -1,0 +1,1 @@
+A tiny girl no bigger than a thumb, delicate and graceful, with long flowing golden hair, wearing a dress made of flower petals, perched on a flower blossom, wide wondering eyes, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery

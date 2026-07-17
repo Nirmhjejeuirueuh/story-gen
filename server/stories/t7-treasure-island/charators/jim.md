@@ -1,0 +1,1 @@
+A bright-eyed young boy with tousled sandy hair, wearing a simple worn shirt and waistcoat like an innkeeper's child, an adventurous eager expression, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery

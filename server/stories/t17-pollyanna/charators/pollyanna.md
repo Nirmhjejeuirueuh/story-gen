@@ -1,0 +1,1 @@
+A cheerful orphan child with sunny blonde braided hair, wearing a simple neat dress, an ever-hopeful sunny smile and bright warm eyes, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery

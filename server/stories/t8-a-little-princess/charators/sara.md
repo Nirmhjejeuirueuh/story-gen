@@ -1,0 +1,1 @@
+A well-dressed young girl with dark thoughtful eyes and neat dark hair, wearing a fine travelling coat and dress, a composed dignified little face with quiet warmth, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery

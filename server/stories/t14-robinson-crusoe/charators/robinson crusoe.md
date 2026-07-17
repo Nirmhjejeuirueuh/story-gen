@@ -1,0 +1,1 @@
+A young adventurous child with windswept hair, wearing simple sailor's clothes, eager bright eyes full of wonder, a hopeful adventurous expression, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery

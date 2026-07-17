@@ -1,0 +1,1 @@
+A pale, thin young child with a serious solemn little face, straight dark hair, wearing a plain travelling dress, a curious watchful expression that slowly warms with wonder, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery

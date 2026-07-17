@@ -1,0 +1,1 @@
+A cheerful young child wearing a bright red hooded cloak over a simple village dress, rosy cheeks, a sweet warm smile, tidy short hair peeking from under the hood, carrying a small wicker basket, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery

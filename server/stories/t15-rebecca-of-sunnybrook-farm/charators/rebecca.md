@@ -1,0 +1,1 @@
+A bright, talkative young child with dark curly hair tied loosely, wearing a simple countryside dress, an eager chatty expression and sparkling lively eyes, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery

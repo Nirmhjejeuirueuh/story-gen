@@ -1,0 +1,1 @@
+A spirited young girl with unruly dark hair often pulled back messily, an energetic tomboyish posture, wearing a simple old-fashioned dress, an expressive determined face full of warmth and mischief, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery
