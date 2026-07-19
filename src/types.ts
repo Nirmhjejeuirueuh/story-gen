@@ -14,16 +14,6 @@ export enum IllustrationStyle {
   CUTE_3D = "Cute 3D"
 }
 
-export interface StoryTemplate {
-  id: string;
-  title: string;
-  coverImage: string;
-  description: string;
-  ageRange: string;
-  numberOfPages: number;
-  promptTemplate: string; // Dynamic instructions to direct the Gemini prompt engine
-}
-
 export interface Character {
   id: string;
   ownerId?: string; // Firebase uid of the user who created it; absent on legacy/shared records
@@ -178,11 +168,6 @@ export interface Job {
   error?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface AppConfig {
-  templates: StoryTemplate[];
-  styles: { value: IllustrationStyle; label: string; description: string; preview: string }[];
 }
 
 export interface SystemSettings {

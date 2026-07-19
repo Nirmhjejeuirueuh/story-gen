@@ -49,38 +49,6 @@ Style constraints: render every section in the house art style above (${HOUSE_ST
   }
 
   /**
-   * Generates a prompt for generating a structured story JSON.
-   */
-  public generateStoryPrompt(templateTitle: string, templatePrompt: string, style: IllustrationStyle, childName: string, numPages: number = 8): string {
-    return `Generate a complete, highly engaging children's story based on the template theme "${templateTitle}".
-Theme and Plot guideline: ${templatePrompt}
-Visual Illustration Style: ${style}
-Number of pages requested: ${numPages}
-
-CRITICAL PLOT & SYSTEM CONSTRAINTS:
-1. Use the EXACT placeholder "MAIN_CHARACTER" in the text instead of the child's actual name. Do not write "${childName}" anywhere in the storyText. Write "MAIN_CHARACTER".
-2. The narrative must flow smoothly from page 1 to page ${numPages}, establishing a charming opening, an exciting rising action, a heartwarming climax, and a comforting resolution suitable for a child's bedtime or daytime reading.
-3. Every page must have a rich, descriptive and actionable "illustrationPrompt" specifying exactly what's happening in the scene.
-4. Each page should have 2-4 sentences of simple, beautiful story text.
-
-You MUST return the output as a valid, parsable JSON object matching this exact schema:
-{
-  "title": "A highly creative, magical storybook title",
-  "coverTitle": "An engaging, short cover subtitle or alternative front title",
-  "pages": [
-    {
-      "pageNumber": 1,
-      "storyText": "MAIN_CHARACTER was sitting under the big oak tree...",
-      "illustrationPrompt": "MAIN_CHARACTER sitting under a massive, glowing golden oak tree, holding a tiny, glittering compass, looking up at the whispering green leaves in awe."
-    }
-    // Repeat for all ${numPages} pages
-  ]
-}
-
-Ensure the output is ONLY valid JSON, with NO surrounding Markdown backticks or chat dialogue outside the JSON.`;
-  }
-
-  /**
    * REDESIGN: generates the pages for a Story Library TEMPLATE (not a personalized book).
    * Given the story and its cast, the model writes, for each of `numPages` pages: the narrative
    * story text, a chosen page LAYOUT (by id, from the supplied catalogue), a scene illustration

@@ -32,24 +32,4 @@ export class RequestValidator {
     next();
   }
 
-  public static validateBook(req: Request, res: Response, next: NextFunction): void {
-    const { characterId, templateId, style, childName } = req.body;
-    if (!characterId) {
-       res.status(400).json({ error: "Validation Failed: 'characterId' is required to link character designs." });
-       return;
-    }
-    if (!templateId) {
-       res.status(400).json({ error: "Validation Failed: 'templateId' is required." });
-       return;
-    }
-    if (!style) {
-       res.status(400).json({ error: "Validation Failed: Illustration 'style' is required." });
-       return;
-    }
-    if (!childName || typeof childName !== "string" || childName.trim().length === 0) {
-       res.status(400).json({ error: "Validation Failed: 'childName' is required." });
-       return;
-    }
-    next();
-  }
 }

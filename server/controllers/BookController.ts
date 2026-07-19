@@ -37,79 +37,6 @@ export class BookController {
   }
 
   /**
-   * Creates a new book and queues background story outline generation
-   */
-  public createBook = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { characterId, templateId, style, childName, numberOfPages } = req.body;
-
-      const book: Book = {
-        id: "book_" + Math.random().toString(36).substring(2, 11),
-        ownerId: (req as AuthedRequest).uid,
-        title: `${childName}'s Adventure`,
-        coverTitle: "Personalized Storybook",
-        characterId,
-        templateId,
-        style,
-        childName,
-        pages: [], // Populated in the background by Story job
-        createdAt: new Date().toISOString()
-      };
-
-      const saved = await this.bookRepo.create(book);
-      console.log(`[BookController] Book shell created: ${saved.id}. Queuing story generation...`);
-
-      // Queue background job to generate story text and illustration prompts
-      const job = await this.queueService.addJob(JobType.STORY, {
-        bookId: saved.id,
-        templateId,
-        style,
-        childName,
-        numberOfPages: numberOfPages || 8
-      });
-
-      res.status(210).json({
-        message: "Book created and story generation job initialized.",
-        book: saved,
-        jobId: job.id
-      });
-    } catch (error: any) {
-      console.error("[BookController] Error creating book:", error);
-      res.status(500).json({ error: "Failed to create book: " + error.message });
-    }
-  };
-
-  /**
-   * Re-queues story text generation for an existing book (e.g. after a failed attempt)
-   */
-  public regenerateStoryText = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      const book = await this.bookRepo.findById(id);
-      if (!book || !this.canModifyBook(book, req as AuthedRequest)) {
-        res.status(404).json({ error: "Book not found." });
-        return;
-      }
-
-      const job = await this.queueService.addJob(JobType.STORY, {
-        bookId: book.id,
-        templateId: book.templateId,
-        style: book.style,
-        childName: book.childName,
-        numberOfPages: 8
-      });
-
-      res.status(202).json({
-        message: "Story generation re-queued.",
-        jobId: job.id
-      });
-    } catch (error: any) {
-      console.error("[BookController] Error regenerating story text:", error);
-      res.status(500).json({ error: "Failed to regenerate story text: " + error.message });
-    }
-  };
-
-  /**
    * Creates a book directly from a fixed-cast filesystem Story Library entry.
    * No personalized character, style choice, or AI text generation is involved -
    * pages are built synchronously from the hand-authored chapter illustration prompts.
@@ -416,15 +343,4 @@ export class BookController {
     }
   };
 
-  // Story-book template catalogue — read-only; feeds the custom photo-book wizard's template
-  // picker. (The old admin CRUD UI for authoring templates was unreachable dead code and has
-  // been removed; templates are seeded from DEFAULT_TEMPLATES in server/database/db.ts.)
-  public getTemplates = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const templates = await this.bookRepo.getTemplates();
-      res.status(200).json(templates);
-    } catch (error: any) {
-      res.status(500).json({ error: "Failed to load templates: " + error.message });
-    }
-  };
 }

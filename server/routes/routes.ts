@@ -92,23 +92,18 @@ router.patch("/story-library/:id/pages/:pageNumber", storyLibraryController.upda
 router.post("/story-library/:id/pages/:pageNumber/generate-image", storyLibraryController.generatePageImage);
 
 // Books Management
-router.post("/books", RequestValidator.validateBook, bookController.createBook);
 router.post("/books/from-library", bookController.createBookFromLibrary);
 router.get("/books", bookController.getAllBooks);
 router.get("/books/:id", bookController.getBookById);
 router.put("/books/:id", bookController.updateBook);
 router.delete("/books/:id", bookController.deleteBook);
 router.get("/books/:id/pages", bookController.getBookPages);
-router.post("/books/:id/regenerate-story", bookController.regenerateStoryText);
 router.patch("/books/:id/pages/:pageNumber/layout", bookController.updatePageLayout);
 
 // Page Render batch / single
 router.post("/books/:id/generate", bookController.generateIllustrations);
 router.post("/pages/regenerate", bookController.regeneratePageIllustration);
 router.post("/books/:id/export", bookController.exportBook);
-
-// Story-book template catalogue (feeds the custom photo-book wizard's template picker).
-router.get("/templates", bookController.getTemplates);
 
 // System Settings Manager — admin only (holds the shared Gemini/OpenAI API keys).
 router.get("/settings", adminOnly, (req, res) => {

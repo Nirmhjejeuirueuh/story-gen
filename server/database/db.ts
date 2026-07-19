@@ -5,8 +5,7 @@
 
 import fs from "fs";
 import path from "path";
-import { Character, CharacterSheet, Book, Job, StoryTemplate, SystemSettings } from "../../src/types.js";
-import { DEFAULT_TEMPLATES } from "../config/config.js";
+import { Character, CharacterSheet, Book, Job, SystemSettings } from "../../src/types.js";
 import { getFirestore } from "./firestore.js";
 
 interface DatabaseSchema {
@@ -14,7 +13,6 @@ interface DatabaseSchema {
   characterSheets: CharacterSheet[];
   books: Book[];
   jobs: Job[];
-  templates: StoryTemplate[];
   settings: SystemSettings;
 }
 
@@ -64,7 +62,6 @@ class DatabaseEngine {
     characterSheets: [],
     books: [],
     jobs: [],
-    templates: [...DEFAULT_TEMPLATES],
     settings: { ...DEFAULT_SETTINGS },
   };
   private db = getFirestore();
@@ -73,12 +70,11 @@ class DatabaseEngine {
   async init(): Promise<void> {
     if (this.initialized) return;
 
-    const [chars, sheets, books, jobs, templates, settingsDoc] = await Promise.all([
+    const [chars, sheets, books, jobs, settingsDoc] = await Promise.all([
       this.db.collection("characters").get(),
       this.db.collection("characterSheets").get(),
       this.db.collection("books").get(),
       this.db.collection("jobs").get(),
-      this.db.collection("templates").get(),
       this.db.collection("settings").doc(SETTINGS_DOC_ID).get(),
     ]);
 
@@ -86,7 +82,6 @@ class DatabaseEngine {
     this.schema.characterSheets = sheets.docs.map((d) => d.data() as CharacterSheet);
     this.schema.books = books.docs.map((d) => d.data() as Book);
     this.schema.jobs = jobs.docs.map((d) => d.data() as Job);
-    this.schema.templates = templates.empty ? [...DEFAULT_TEMPLATES] : templates.docs.map((d) => d.data() as StoryTemplate);
     this.schema.settings = settingsDoc.exists ? (settingsDoc.data() as SystemSettings) : { ...DEFAULT_SETTINGS };
 
     const legacy = this.readLegacyJson();
@@ -94,9 +89,6 @@ class DatabaseEngine {
     // First run: migrate an existing local data_db.json into Firestore so nothing is lost.
     if (chars.empty && sheets.empty && books.empty && jobs.empty) {
       await this.migrateLegacyJson(legacy);
-    }
-    if (templates.empty) {
-      await Promise.all(this.schema.templates.map((t) => this.upsert("templates", t.id, t)));
     }
     if (!settingsDoc.exists) {
       // Carry over settings (API keys, provider choice) from the legacy DB if present.
@@ -161,9 +153,6 @@ class DatabaseEngine {
 
   get jobs() { return this.schema.jobs; }
   set jobs(val) { this.schema.jobs = val; }
-
-  get templates() { return this.schema.templates; }
-  set templates(val) { this.schema.templates = val; }
 }
 
 export const db = new DatabaseEngine();

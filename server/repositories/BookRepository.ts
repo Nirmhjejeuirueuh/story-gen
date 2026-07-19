@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Book, BookPage, StoryTemplate } from "../../src/types.js";
+import { Book, BookPage } from "../../src/types.js";
 import { db } from "../database/db.js";
 
 export class BookRepository {
@@ -55,15 +55,5 @@ export class BookRepository {
     // Pages are stored as an array field on the book document, so persist the whole book.
     await db.upsert("books", bookId, book);
     return book.pages[pageIndex];
-  }
-
-  // Story Templates Operations
-  public async getTemplates(): Promise<StoryTemplate[]> {
-    return [...db.templates];
-  }
-
-  public async findTemplateById(id: string): Promise<StoryTemplate | null> {
-    const template = db.templates.find(t => t.id === id);
-    return template || null;
   }
 }

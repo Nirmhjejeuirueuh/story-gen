@@ -146,8 +146,6 @@ export class QueueService {
         const label = `Job ${job.id} (${job.type})`;
         if (job.type === JobType.CHARACTER_SHEET) {
           await this.withTimeout(this.executeCharacterSheetJob(job), timeout, label);
-        } else if (job.type === JobType.STORY) {
-          await this.withTimeout(this.executeStoryJob(job), timeout, label);
         } else if (job.type === JobType.IMAGE) {
           await this.withTimeout(this.executeImageJob(job), timeout, label);
         } else if (job.type === JobType.PDF) {
@@ -233,65 +231,6 @@ export class QueueService {
       status: "Completed",
       progress: 100,
       result: { characterSheetId: sheet.id }
-    });
-  }
-
-  /**
-   * Generates a book story structured text
-   */
-  private async executeStoryJob(job: Job) {
-    const { bookId, templateId, style, childName, numberOfPages } = job.payload;
-    
-    const template = await this.bookRepo.findTemplateById(templateId);
-    if (!template) throw new Error(`Story template ${templateId} not found.`);
-
-    await this.jobRepo.update(job.id, { progress: 40 });
-
-    const prompt = promptEngine.generateStoryPrompt(
-      template.title,
-      template.promptTemplate,
-      style,
-      childName,
-      numberOfPages || template.numberOfPages
-    );
-
-    const textProvider = db.settings?.textProvider || "gemini";
-    const jsonText = textProvider === "openai"
-      ? await openaiProvider.generateText(prompt, "You are a specialized JSON child storybook creator.", true)
-      : await geminiProvider.generateText(prompt, "You are a specialized JSON child storybook creator.", true);
-
-    await this.jobRepo.update(job.id, { progress: 80 });
-
-    let storyResult;
-    try {
-      // Clean potential json markdown wrapping
-      const cleaned = jsonText.replace(/```json/gi, "").replace(/```/g, "").trim();
-      storyResult = JSON.parse(cleaned);
-    } catch (parseErr) {
-      console.warn("Failed to parse Gemini JSON story, attempting cleanup fallback...", parseErr);
-      throw new Error("Story generation output was not in valid structured JSON format.");
-    }
-
-    // Map result pages to BookPages structure
-    const pages = storyResult.pages.map((p: any) => ({
-      id: "page_" + Math.random().toString(36).substring(2, 11),
-      pageNumber: p.pageNumber,
-      storyText: p.storyText,
-      illustrationPrompt: p.illustrationPrompt,
-      imageStatus: "Queued",
-      createdAt: new Date().toISOString()
-    }));
-
-    await this.bookRepo.update(bookId, {
-      title: storyResult.title || `${childName}'s Adventure`,
-      coverTitle: storyResult.coverTitle || "An AI Personalized Story Book",
-      pages
-    });
-
-    await this.jobRepo.update(job.id, {
-      status: "Completed",
-      progress: 100,
-      result: { bookId, pagesCount: pages.length }
     });
   }
 

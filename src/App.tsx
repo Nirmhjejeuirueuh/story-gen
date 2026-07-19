@@ -26,7 +26,7 @@ import {
   LogOut
 } from "lucide-react";
 
-import { Character, Book, StoryTemplate, IllustrationStyle, Job, JobType } from "./types.js";
+import { Character, Book, Job, JobType } from "./types.js";
 import ImageUploader from "./components/ImageUploader.tsx";
 import CharacterSheetViewer from "./components/CharacterSheetViewer.tsx";
 import StoryEditor from "./components/StoryEditor.tsx";
@@ -36,7 +36,6 @@ import PDFExportDialog from "./components/PDFExportDialog.tsx";
 import SystemSettings from "./components/SystemSettings.tsx";
 import StoryLibraryBrowser from "./components/StoryLibraryBrowser.tsx";
 import { useAuth } from "./auth/AuthContext.tsx";
-import { DEFAULT_STYLES } from "../server/config/config.js";
 
 type Tab = "dashboard" | "wizard" | "books" | "characters" | "jobs" | "settings" | "library";
 
@@ -51,7 +50,6 @@ export default function App() {
   // Entities state
   const [characters, setCharacters] = useState<Character[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
-  const [templates, setTemplates] = useState<StoryTemplate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
 
   // Loading / Error states
@@ -71,18 +69,12 @@ export default function App() {
   const [charSheetJobId, setCharSheetJobId] = useState<string | null>(null);
   const [charSetupMode, setCharSetupMode] = useState<"new" | "existing">("new");
 
-  const [selectedStyle, setSelectedStyle] = useState<IllustrationStyle>(IllustrationStyle.STORYBOOK);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  
   const [activeBook, setActiveBook] = useState<Book | null>(null);
-  const [storyJobId, setStoryJobId] = useState<string | null>(null);
-  const [storyFailed, setStoryFailed] = useState(false);
 
   const [isRegeneratingPageId, setIsRegeneratingPageId] = useState<number | null>(null);
 
   // Poll for active jobs
   useEffect(() => {
-    fetchTemplates();
     fetchCharacters();
     fetchBooks();
     fetchJobs();
@@ -93,16 +85,13 @@ export default function App() {
       if (charSheetJobId) {
         checkCharSheetStatus();
       }
-      if (storyJobId) {
-        checkStoryStatus();
-      }
       if (activeBook) {
         refreshActiveBook();
       }
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [charSheetJobId, storyJobId, activeBook?.id]);
+  }, [charSheetJobId, activeBook?.id]);
 
   // Adaptive fast polling: while the active book still has illustrations queued or
   // generating, refresh it every 1.5s so page statuses (Queued → Drawing → Ready)
@@ -153,11 +142,6 @@ export default function App() {
     }
   };
 
-  const fetchTemplates = async () => {
-    const data = await safeFetchJson("/api/templates");
-    if (Array.isArray(data)) setTemplates(data);
-  };
-
   const fetchCharacters = async () => {
     const data = await safeFetchJson("/api/characters");
     if (Array.isArray(data)) setCharacters(data);
@@ -196,43 +180,6 @@ export default function App() {
         setWizardError(`Character Sheet Generation Failed: ${job.error}`);
         setCharSheetJobId(null);
       }
-    }
-  };
-
-  const checkStoryStatus = async () => {
-    if (!storyJobId || !activeBook) return;
-    const job: Job | null = await safeFetchJson(`/api/jobs/${storyJobId}`);
-    if (job) {
-      if (job.status === "Completed") {
-        setStoryJobId(null);
-        // Load populated pages
-        const data = await safeFetchJson(`/api/books/${activeBook.id}`);
-        if (data) {
-          setActiveBook(data);
-          fetchBooks();
-          setWizardStep(6); // Forward to Illustrations progress step
-        }
-      } else if (job.status === "Failed") {
-        setWizardError(`Story Outline Generation Failed: ${job.error}`);
-        setStoryJobId(null);
-        setStoryFailed(true);
-      }
-    }
-  };
-
-  const handleRetryStoryGeneration = async () => {
-    if (!activeBook) return;
-    setWizardError(null);
-    setStoryFailed(false);
-    try {
-      const res = await fetch(`/api/books/${activeBook.id}/regenerate-story`, { method: "POST" });
-      const contentType = res.headers.get("content-type");
-      if (res.ok && contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        setStoryJobId(data.jobId);
-      }
-    } catch (err) {
-      console.error("Failed to retry story generation:", err);
     }
   };
 
@@ -404,48 +351,6 @@ export default function App() {
     }
   };
 
-  const handleGenerateStoryText = async () => {
-    if (!createdCharacter || !selectedTemplateId) {
-      setWizardError("Please complete character profiles and select a story template.");
-      return;
-    }
-    setWizardError(null);
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/books", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          characterId: createdCharacter.id,
-          templateId: selectedTemplateId,
-          style: selectedStyle,
-          childName: createdCharacter.name,
-          numberOfPages: 8,
-        }),
-      });
-
-      const contentType = res.headers.get("content-type");
-      let data: any = {};
-      if (contentType && contentType.includes("application/json")) {
-        data = await res.json();
-      } else {
-        throw new Error(`Server returned non-JSON response (status ${res.status}). Please verify configuration.`);
-      }
-
-      if (!res.ok) throw new Error(data.error || "Failed to initiate storybook outline");
-
-      setActiveBook(data.book);
-      setStoryJobId(data.jobId);
-      setStoryFailed(false);
-      setWizardStep(5); // Go to Story Text Drafting screen
-    } catch (err: any) {
-      setWizardError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleBatchDrawIllustrations = async () => {
     if (!activeBook) return;
     try {
@@ -506,10 +411,7 @@ export default function App() {
     setCreatedCharacter(null);
     setCharSheetJobId(null);
     setCharSetupMode(characters.length > 0 ? "existing" : "new");
-    setSelectedTemplateId(null);
     setActiveBook(null);
-    setStoryJobId(null);
-    setStoryFailed(false);
     setWizardStep(1);
     setActiveTab("wizard");
   };
@@ -731,8 +633,6 @@ export default function App() {
                             onClick={() => {
                               setActiveBook(book);
                               setCreatedCharacter(characters.find((c) => c.id === book.characterId) || null);
-                              setSelectedTemplateId(book.templateId);
-                              setSelectedStyle(book.style);
                               setWizardStep(7); // Go to book preview step in wizard!
                               setActiveTab("wizard");
                             }}
@@ -1053,109 +953,6 @@ export default function App() {
                 </motion.div>
               )}
 
-              {/* Wizard Step 4: Choose Style */}
-              {wizardStep === 4 && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6"
-                >
-                  <div>
-                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-1.5">
-                      Step 4: Choose Illustration Style
-                    </h3>
-                    <p className="text-sm text-slate-500 mt-1">
-                      Select the visual style for your storybook's page illustrations.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    {DEFAULT_STYLES.map((style) => {
-                      const isSel = selectedStyle === style.value;
-                      return (
-                        <div
-                          key={style.value}
-                          onClick={() => setSelectedStyle(style.value)}
-                          className={`border rounded-2xl p-5 cursor-pointer shadow-sm hover:shadow transition-all flex flex-col justify-between aspect-square ${
-                            isSel ? "ring-2 ring-emerald-500 border-transparent bg-emerald-50/10" : "border-slate-200 hover:border-slate-300"
-                          }`}
-                        >
-                          <div className="text-4xl text-center">{style.preview.split(" ")[0]}</div>
-                          <div className="mt-4 space-y-1">
-                            <h5 className="font-bold text-slate-800 text-sm">{style.label}</h5>
-                            <p className="text-[11px] text-slate-500 leading-normal line-clamp-3">{style.description}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="pt-4 border-t border-slate-100 flex justify-between">
-                    <button
-                      onClick={() => setWizardStep(3)}
-                      className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition"
-                    >
-                      Back to Story Book Template
-                    </button>
-                    <button
-                      onClick={handleGenerateStoryText}
-                      disabled={loading}
-                      className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm transition shadow flex items-center gap-1"
-                    >
-                      {loading ? "Generating Story Outline..." : "Generate Story text"} <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Wizard Step 5: Draft Story Text (Wait screen) */}
-              {wizardStep === 5 && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex flex-col items-center justify-center p-12 text-center bg-white border border-slate-200 rounded-3xl shadow-sm"
-                >
-                  {storyFailed ? (
-                    <>
-                      <div className="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center text-red-600">
-                        <AlertCircle className="h-7 w-7" />
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800 mt-4">Story Generation Failed</h3>
-                      <p className="text-sm text-slate-500 mt-2 max-w-md">
-                        Something went wrong while drafting the story text. Check System Settings (API keys/provider) and try again.
-                      </p>
-                      <div className="flex gap-3 mt-6">
-                        <button
-                          onClick={() => setWizardStep(3)}
-                          className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition"
-                        >
-                          Back to Template
-                        </button>
-                        <button
-                          onClick={handleRetryStoryGeneration}
-                          className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm transition shadow"
-                        >
-                          Retry Generation
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="relative flex h-14 w-14 items-center justify-center">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <div className="relative rounded-full h-10 w-10 bg-emerald-600 flex items-center justify-center text-white font-bold">
-                          <Sparkles className="animate-spin h-5 w-5" />
-                        </div>
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800 mt-4">Drafting Story Outline &amp; Text...</h3>
-                      <p className="text-sm text-slate-500 mt-2 max-w-md">
-                        Our AI is generating a customized 8-chapter narrative based on the chosen theme. We are crafting engaging story blocks and detailed illustration prompts in structured format.
-                      </p>
-                    </>
-                  )}
-                </motion.div>
-              )}
-
               {/* Wizard Step 6: Render Illustrations */}
               {wizardStep === 6 && activeBook && (
                 <motion.div
@@ -1367,8 +1164,6 @@ export default function App() {
                             onClick={() => {
                               setActiveBook(book);
                               setCreatedCharacter(characters.find((c) => c.id === book.characterId) || null);
-                              setSelectedTemplateId(book.templateId);
-                              setSelectedStyle(book.style);
                               setWizardStep(7); // Jump directly to Flip Book preview
                               setActiveTab("wizard");
                             }}

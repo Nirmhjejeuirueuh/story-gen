@@ -5,6 +5,25 @@ All notable changes to StoryGen are recorded here. Format loosely follows
 
 ## [Unreleased]
 
+### Removed — the old "custom template" book-creation flow, and the templates collection
+- Traced why a manually-deleted Firestore `templates` collection kept reappearing: `db.ts`
+  reseeded it from a hardcoded `DEFAULT_TEMPLATES` array on every server startup if the
+  collection was empty — by design, but nobody actually uses this collection anymore.
+- Confirmed the whole flow it fed is dead: wizard steps "Choose Illustration Style" (4) and
+  "Draft Story Text" (5), `createBook` (`POST /api/books`), `regenerateStoryText`
+  (`POST /books/:id/regenerate-story`), and the `STORY` background job type. The Story Library
+  flow (`createBookFromLibrary`) fully replaced this — it jumps straight from character
+  creation to illustration rendering (step 6) and never sets the state (`selectedTemplateId`)
+  this old path required, so it was permanently unreachable, not just unused.
+- Removed the full vertical: the two dead wizard steps + their handlers/state in `App.tsx`;
+  `createBook`/`regenerateStoryText`/`getTemplates` in `BookController`; `executeStoryJob` +
+  the `STORY` dispatch case in `QueueService`; `getTemplates`/`findTemplateById` in
+  `BookRepository`; `validateBook`; the `templates` schema field + seed-on-init logic in `db.ts`;
+  `DEFAULT_TEMPLATES`/`DEFAULT_STYLES` in `server/config/config.ts`; the `StoryTemplate`/
+  `AppConfig` types; and the already-orphaned, never-rendered `StorySelector.tsx`. Deleted the
+  `templates` Firestore collection — it will not come back, since nothing seeds it anymore.
+- Verified with `tsc --noEmit` and a full `npm run build` (clean) after every step.
+
 ### Fixed — real errors instead of generic "failed" messages
 - Diagnosed a page-image failure (Jungle Book pg 1, a lone-baby scene) down to Gemini's own API:
   `finishReason: PROHIBITED_CONTENT` — its safety filter blocking a depiction of an unsupervised
