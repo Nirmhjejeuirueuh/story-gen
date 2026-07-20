@@ -5,6 +5,92 @@ All notable changes to StoryGen are recorded here. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed — text scrim was rendering as a hard-edged box on one layout
+- Layout 4 (Full Width Header Text) came out with a visibly rectangular translucent band behind
+  the text — inconsistent with the soft, cloud-like fade the other layouts produced. Root cause:
+  its prompt said "full-width band", which pushed the model toward a literal geometric shape.
+  Rewrote all 7 layouts' scrim language (and the shared `PROFESSIONAL_FINISH`) to explicitly
+  require an irregular, cloud-like glow that fades unevenly in every direction, explicitly
+  forbidding any rectangle/band/panel/box shape or visible straight edge. Migrated to Firestore
+  and verified by regenerating the exact page that failed (Little Red Riding Hood pg 1, layout 4)
+  — confirmed soft irregular fade, no hard edge.
+
+### Changed — illustration now fills the entire page; text overlaid on top
+- Per feedback: the illustration must cover every pixel of the page edge to edge (no parchment
+  strip or margin anywhere), with the story text layered directly on top of the artwork using a
+  soft translucent scrim for legibility — like a real picture-book spread, not a text box next to
+  a picture. Rewrote all 7 layout prompts (`server/config/layouts.ts`) and `PromptEngine.
+  PROFESSIONAL_FINISH` to compose this way; each layout still varies WHERE the text sits (top,
+  floating, diagonal, header, side, curved), just not as a reserved zone anymore. Migrated all 7
+  updated prompts into the live Firestore `layoutPlans` collection (seed-once means a config edit
+  alone doesn't reach already-seeded docs). Verified with a real render (Little Red Riding Hood):
+  full-bleed confirmed, text overlay confirmed legible.
+- Same render also surfaced a second data point for the recurring duplicate-word issue: both
+  duplications ("off off", "on on") landed exactly at a line-wrap boundary — suggests the image
+  model specifically tends to repeat the last word of a line when wrapping, not just random noise.
+  Still unfixed pending a decision on the verify/retry approach discussed earlier.
+
+### Changed — removed the ornamental page border
+- Per feedback after reviewing real generated pages (Alice, Little Red Riding Hood): dropped the
+  gold border + corner flourishes from `PromptEngine.PROFESSIONAL_FINISH` and layout 7's prompt.
+  Pages are now borderless full-bleed parchment with just the illustration and the small text
+  divider — only the text *placement* varies per layout now, no decorative frame. Verified with a
+  real render (Little Red Riding Hood page 1): confirmed borderless.
+- Also confirmed a real, recurring risk while reviewing those same generated pages: baked-in text
+  can come out duplicated ("magical magical", "busy busy") or garbled ("sushrour" for "mushroom",
+  dropped letters in "politely a[nd] asked ... where s[he] was going"). The first is a text-model
+  slip (fixable by editing that page's text and regenerating); the second is an inherent weakness
+  of baking text into AI-generated images — no prompt wording guarantees correct spelling, it can
+  only be caught after generation. Not yet fixed — flagged for a possible automated verify/retry
+  step (re-check the rendered text against the intended text, retry on mismatch) if wanted.
+
+### Changed — unified the book-image pipeline onto pre-generated, text-baked pages
+Two disconnected image pipelines existed: the admin "Generate" pipeline (AI picks layout, writes
+text, bakes it into the image — built earlier this session but never actually consumed) and the
+real book-creation path (`createBookFromLibrary` + `QueueService.executeImageJob`), which still
+read the legacy hand-authored `chapters/*.md` files and rendered **text-free** images with the
+text drawn separately as HTML/PDF-vector-text. This is why created books still showed the old
+no-text look. Unified everything onto the first pipeline:
+- **Prompt safety.** `generatePagesPrompt` now explicitly forbids depicting a lone, unsupervised
+  child/baby in a risky scene (fire, height, isolation) — always require a companion in frame.
+  Verified against the real API on the Jungle Book story: every previously-failing scene
+  (`PROHIBITED_CONTENT`, reproduced this session) now includes Mother Wolf/Bagheera/Baloo in
+  frame; the reworded page 1 rendered successfully end-to-end. Not a 100% guarantee — Gemini's
+  child-safety filter is stricter for some scenes (fire-holding, even with a companion) and can
+  still reject; the app now surfaces the real `finishReason` so a failure is actionable.
+- **New layout 7 — wordless full illustration.** Added to `server/config/layouts.ts` and the live
+  Firestore `layoutPlans` collection. `generatePagesPrompt` picks it ~1 in 6-8 pages, only at a
+  natural pause, folding any lost plot beat into the next page's text. Verified: a 16-page
+  regeneration produced 2 wordless pages, both at genuine scene breaks, no narrative gap.
+- **Professional page finish**, rewritten to match a reference image: ornamental gold border
+  framing all four page edges (not just the text), corner flourishes, one continuous parchment
+  tone under text and art, elegant serif lettering with a small divider. Verified visually.
+- **Auto-generate on first use.** `StoryLibraryController.generatePagesForStory`/
+  `generatePageImageForStory` extracted into reusable methods (`ensurePagesGenerated`,
+  `ensurePageImage`) so book creation can call them directly instead of requiring an admin step.
+- **`createBookFromLibrary`** now builds book pages from the story's pre-generated template pages
+  (`templateStore.getPages`) instead of the legacy chapter files. Non-personalized books reuse the
+  template's already-rendered image instantly (no Gemini spend); personalized books (child's own
+  photo as hero) queue a fresh render per page via `QueueService.executeImageJob`, rewritten to
+  build the prompt with `buildTextPageImagePrompt` (baked text) instead of the retired
+  `withNoText`, keeping the existing hero-photo conditioning.
+- **Removed dead code this created:** the `executeImageJob` non-library branch (unreachable since
+  every remaining book has `libraryStoryId`), `PromptEngine.generateIllustrationPrompt`/
+  `NO_TEXT_CONSTRAINT`/`withNoText`, `StoryLibraryService.saveIllustration` (legacy on-disk cache,
+  superseded by the Firestore/GCS template-image cache).
+- **Retired the HTML text-overlay system**, now redundant: `BookPreview.tsx`'s language switcher,
+  `textZone` drag-to-reposition editor, and paragraph/drop-cap text rendering; `PDFExportDialog`'s
+  separate vector-text drawing (each PDF page is now just the full-bleed page image); `BookPage.
+  textZone`/`texts` (i18n dict) types; `BookController.updatePageLayout` and its route. The ZIP
+  export's `story_script.txt` (text + prompts as reference) is unchanged.
+- Verified with `tsc --noEmit` and `npm run build` after every step, plus live Gemini calls
+  against the Jungle Book story (page regeneration + 3 test image renders) — see above.
+- **Out of scope this pass:** reviewing the user's uploaded `alice story.pdf` for spelling
+  mistakes — blocked, this environment is missing `poppler-utils` so PDF pages can't be rendered;
+  needs specific pages as images or a written list instead. Retroactively regenerating all 19
+  stories' pages under the new pipeline (cost) — only the pipeline/prompts were fixed so future
+  admin-triggered "Generate" runs are correct; existing stories still need a manual re-run.
+
 ### Removed — the old "custom template" book-creation flow, and the templates collection
 - Traced why a manually-deleted Firestore `templates` collection kept reappearing: `db.ts`
   reseeded it from a hardcoded `DEFAULT_TEMPLATES` array on every server startup if the
