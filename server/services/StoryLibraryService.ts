@@ -144,37 +144,6 @@ export class StoryLibraryService {
     return this.findIllustrationFile(storyId, pageNumber);
   }
 
-  /**
-   * Persists a generated chapter illustration (data URI) to the story's own
-   * `illustrations` folder on disk, e.g. server/stories/<storyId>/illustrations/3.png
-   * Overwrites any previously cached illustration for that page (in any format).
-   */
-  public saveIllustration(storyId: string, pageNumber: number, dataUri: string): string | null {
-    const storyDir = path.join(this.storiesRoot, storyId);
-    if (!fs.existsSync(storyDir) || !fs.statSync(storyDir).isDirectory()) return null;
-
-    const match = /^data:image\/([a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUri);
-    if (!match) return null;
-
-    const [, subtype, base64Data] = match;
-    const ext = subtype === "svg+xml" ? "svg" : subtype === "jpeg" ? "jpg" : subtype;
-
-    const illustrationsDir = path.join(storyDir, "illustrations");
-    if (!fs.existsSync(illustrationsDir)) {
-      fs.mkdirSync(illustrationsDir, { recursive: true });
-    }
-
-    // Remove any stale cached copy in a different format before writing the fresh one
-    const existing = this.findIllustrationFile(storyId, pageNumber);
-    if (existing && path.basename(existing) !== `${pageNumber}.${ext}`) {
-      fs.unlinkSync(existing);
-    }
-
-    const filePath = path.join(illustrationsDir, `${pageNumber}.${ext}`);
-    fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"));
-    return filePath;
-  }
-
   private findIllustrationFile(storyId: string, pageNumber: number): string | null {
     const illustrationsDir = path.join(this.storiesRoot, storyId, "illustrations");
     if (!fs.existsSync(illustrationsDir)) return null;

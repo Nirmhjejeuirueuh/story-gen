@@ -59,18 +59,14 @@ export interface Book {
 export interface BookPage {
   id: string;
   pageNumber: number;
-  title?: string; // optional chapter heading shown above the page text in BookPreview
-  storyText: string; // canonical (English) text; kept for back-compat
-  texts?: Record<string, string>; // language code -> text, e.g. { en: "...", ja: "..." }
+  title?: string; // optional chapter heading; not rendered (text is baked into the image)
+  storyText: string; // narrative text for this page — baked directly into the image at generation time
   illustrationPrompt: string;
   characterKeys?: string[]; // Story Library character reference keys used for this page's illustration
-  imageUrl?: string; // Generated image
+  layoutId?: number; // chosen page layout (see server/config/layouts.ts) — story text is baked into the image per this layout
+  imageUrl?: string; // Generated image (story text already baked in)
   imageStatus: 'Queued' | 'Generating' | 'Completed' | 'Failed';
   imageError?: string;
-  // Manual text-position override saved from the Book Preview layout editor. Confined to a
-  // reserved zone (never over the illustration) so the fixed 1:1 print canvas is never at risk.
-  // Absent = automatic alternation (BookPreview's textOnTop rule) decides the position.
-  textZone?: 'top' | 'bottom';
   createdAt: string;
 }
 

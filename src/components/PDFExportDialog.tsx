@@ -59,60 +59,34 @@ export default function PDFExportDialog({ book }: PDFExportDialogProps) {
       doc.setFontSize(11);
       doc.text(`Starring ${book.childName}`, SIZE / 2, SIZE - 50, { align: "center" });
 
-      // 2. Loop through pages — one square PDF page per book page, text stacked with the
-      // illustration (never side-by-side), alternating top/bottom exactly like BookPreview's
-      // textOnTop rule so the printed spread matches what the reader saw on screen.
+      // 2. Loop through pages — one square PDF page per book page. The story text is baked
+      // directly into each generated image (see PromptEngine.buildTextPageImagePrompt), so each
+      // PDF page is simply that full-bleed image, matching the on-screen book preview exactly.
       for (const page of book.pages) {
         doc.addPage([SIZE, SIZE]);
-        doc.setFillColor(246, 239, 221); // Parchment
-        doc.rect(0, 0, SIZE, SIZE, "F");
 
-        const textOnTop = Math.floor((page.pageNumber - 1) / 2) % 2 === 0;
-        const textZoneH = 210;
-        const textY = textOnTop ? MARGIN : SIZE - MARGIN - textZoneH;
-        const imageY = textOnTop ? textY + textZoneH + 16 : MARGIN;
-        const imageH = SIZE - MARGIN * 2 - textZoneH - 16;
-
-        // Chapter title, if authored for this page.
-        let textCursorY = textY + 20;
-        if (page.title) {
-          doc.setTextColor(91, 67, 33);
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(15);
-          doc.text(doc.splitTextToSize(page.title, CONTENT_W), SIZE / 2, textCursorY, { align: "center" });
-          textCursorY += 30;
-        }
-
-        // Story text (HTML on screen; plain vector text here — same words, same page).
-        doc.setTextColor(58, 48, 36);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(13);
-        const splitText = doc.splitTextToSize(personalizeStoryText(page.storyText, book.childName), CONTENT_W);
-        doc.text(splitText, MARGIN, textCursorY);
-
-        // Illustration — text-free artwork, drawn in its own reserved region.
         if (page.imageUrl) {
           try {
-            doc.addImage(page.imageUrl, "JPEG", MARGIN, imageY, CONTENT_W, imageH);
+            doc.addImage(page.imageUrl, "JPEG", 0, 0, SIZE, SIZE);
           } catch (imgErr) {
             console.warn(`Could not draw image for page ${page.pageNumber} in PDF. drawing placeholder.`, imgErr);
-            doc.setDrawColor(203, 178, 130);
-            doc.rect(MARGIN, imageY, CONTENT_W, imageH);
+            doc.setFillColor(246, 239, 221);
+            doc.rect(0, 0, SIZE, SIZE, "F");
             doc.setFont("helvetica", "normal");
             doc.setFontSize(11);
             doc.setTextColor(160, 140, 100);
-            doc.text("Illustration drawing placeholder", SIZE / 2, imageY + imageH / 2, { align: "center" });
+            doc.text("Illustration drawing placeholder", SIZE / 2, SIZE / 2, { align: "center" });
           }
         } else {
-          doc.setDrawColor(203, 178, 130);
-          doc.rect(MARGIN, imageY, CONTENT_W, imageH);
+          doc.setFillColor(246, 239, 221);
+          doc.rect(0, 0, SIZE, SIZE, "F");
           doc.setFont("helvetica", "normal");
           doc.setFontSize(11);
           doc.setTextColor(160, 140, 100);
-          doc.text("No illustration compiled", SIZE / 2, imageY + imageH / 2, { align: "center" });
+          doc.text("No illustration compiled", SIZE / 2, SIZE / 2, { align: "center" });
         }
 
-        // Page numbering
+        // Small page number, matching the subtle footer shown in the on-screen preview.
         doc.setTextColor(160, 140, 100);
         doc.setFontSize(9);
         doc.text(`${page.pageNumber}`, SIZE / 2, SIZE - 18, { align: "center" });

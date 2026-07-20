@@ -7,7 +7,7 @@ import express, { Router, Request, Response } from "express";
 import { UploadController } from "../controllers/UploadController.js";
 import { CharacterController } from "../controllers/CharacterController.js";
 import { BookController } from "../controllers/BookController.js";
-import { StoryLibraryController } from "../controllers/StoryLibraryController.js";
+import { storyLibraryController } from "../controllers/StoryLibraryController.js";
 import { CharacterRepository } from "../repositories/CharacterRepository.js";
 import { BookRepository } from "../repositories/BookRepository.js";
 import { JobRepository } from "../repositories/JobRepository.js";
@@ -31,7 +31,6 @@ const queueService = new QueueService(jobRepo, characterRepo, bookRepo);
 const uploadController = new UploadController();
 const characterController = new CharacterController(characterRepo, queueService);
 const bookController = new BookController(bookRepo, jobRepo, queueService);
-const storyLibraryController = new StoryLibraryController();
 
 // --- REST ENDPOINTS MAP ---
 
@@ -98,7 +97,6 @@ router.get("/books/:id", bookController.getBookById);
 router.put("/books/:id", bookController.updateBook);
 router.delete("/books/:id", bookController.deleteBook);
 router.get("/books/:id/pages", bookController.getBookPages);
-router.patch("/books/:id/pages/:pageNumber/layout", bookController.updatePageLayout);
 
 // Page Render batch / single
 router.post("/books/:id/generate", bookController.generateIllustrations);

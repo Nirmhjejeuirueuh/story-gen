@@ -11,6 +11,8 @@ import { promptEngine } from "../providers/PromptEngine.js";
 import { geminiProvider } from "../providers/GeminiProvider.js";
 import { openaiProvider } from "../providers/OpenAIProvider.js";
 import { storyLibraryService } from "./StoryLibraryService.js";
+import { storyLibraryController } from "../controllers/StoryLibraryController.js";
+import { layoutPlanStore } from "./LayoutPlanStore.js";
 import { storageService } from "./StorageService.js";
 import { db } from "../database/db.js";
 
@@ -241,6 +243,7 @@ export class QueueService {
     const { bookId, pageNumber } = job.payload;
     const book = await this.bookRepo.findById(bookId);
     if (!book) throw new Error(`Book ${bookId} not found.`);
+    if (!book.libraryStoryId) throw new Error(`Book ${bookId} has no libraryStoryId — cannot resolve its template page.`);
 
     const page = book.pages.find(p => p.pageNumber === pageNumber);
     if (!page) throw new Error(`Book page ${pageNumber} not found.`);
@@ -248,112 +251,61 @@ export class QueueService {
     await this.bookRepo.updatePage(bookId, pageNumber, { imageStatus: "Generating" });
     await this.jobRepo.update(job.id, { progress: 30 });
 
-    const imageProvider = db.settings?.imageProvider || "gemini";
     let imageUrl: string;
 
-    if (book.libraryStoryId) {
-      // Fixed-cast Story Library book: use the hand-authored prompt, conditioned on the
-      // referenced characters' reference sheet images for visual consistency.
+    if (!book.characterId) {
+      // Generic (non-personalized) book: reuse the template page's image if it already has one
+      // (instant, no Gemini spend); otherwise render it once and cache it on the TEMPLATE page so
+      // every future generic book for this story reuses the same image from here on.
+      imageUrl = await storyLibraryController.ensurePageImage(book.libraryStoryId, pageNumber);
+    } else {
+      // Personalized: the child's real face has to be baked into a fresh render every time, with
+      // the story text baked in per the page's chosen layout (same as the template pipeline).
       const referenceImages = (await Promise.all(
         (page.characterKeys || []).map((key) => storyLibraryService.getCharacterImageBase64(book.libraryStoryId!, key))
       )).filter((ref): ref is { mime: string; data: string } => !!ref);
 
-      // Hero personalization: if this library book stars an uploaded character, prepend
-      // their reference sheet + photos so the MAIN_CHARACTER hero looks like the real user,
-      // and substitute their name into the illustration prompt.
-      let scenePrompt = page.illustrationPrompt;
-      if (book.characterId) {
-        const hero = await this.characterRepo.findById(book.characterId);
-        if (hero) {
-          const heroRefs: { mime: string; data: string }[] = [];
-          if (hero.characterSheetId) {
-            const sheet = await this.characterRepo.findSheetById(hero.characterSheetId);
-            const ref = sheet?.sheetImage ? await storageService.resolveReference(sheet.sheetImage) : null;
-            if (ref) heroRefs.push(ref);
-          }
-          for (const photo of (hero.photos || []).slice(0, 3)) {
-            const ref = await storageService.resolveReference(photo);
-            if (ref) heroRefs.push(ref);
-          }
-          // Hero references go first so the protagonist's likeness is prioritized.
-          referenceImages.unshift(...heroRefs);
+      const hero = await this.characterRepo.findById(book.characterId);
+      if (hero) {
+        const heroRefs: { mime: string; data: string }[] = [];
+        if (hero.characterSheetId) {
+          const sheet = await this.characterRepo.findSheetById(hero.characterSheetId);
+          const ref = sheet?.sheetImage ? await storageService.resolveReference(sheet.sheetImage) : null;
+          if (ref) heroRefs.push(ref);
         }
-        scenePrompt = scenePrompt.replace(/MAIN_CHARACTER/g, book.childName);
-      }
-
-      // Story text is rendered separately as HTML in BookPreview, so the artwork must be
-      // text-free. Guard the hand-authored scene prompt the same way template prompts are.
-      scenePrompt = promptEngine.withNoText(scenePrompt);
-
-      await this.jobRepo.update(job.id, { progress: 50 });
-
-      imageUrl = imageProvider === "openai"
-        ? await openaiProvider.generateImageWithReferences(scenePrompt, referenceImages)
-        : (imageProvider === "procedural"
-            ? geminiProvider.createProceduralIllustration(scenePrompt, book.style)
-            : await geminiProvider.generateImageWithReferences(scenePrompt, referenceImages, book.style));
-
-      // Cache to the story template's shared illustrations folder ONLY for generic (non-
-      // personalized) books, so a user's hero renders never overwrite the stock artwork.
-      if (!book.characterId) {
-        storyLibraryService.saveIllustration(book.libraryStoryId, pageNumber, imageUrl);
-      }
-    } else {
-      const char = await this.characterRepo.findById(book.characterId!);
-      if (!char) throw new Error(`Character ${book.characterId} not found.`);
-
-      // Collect reference images so the child's real appearance conditions every page.
-      // Priority order: the approved character reference sheet (the consistent "model"),
-      // followed by a few uploaded portraits for facial likeness. These are passed as
-      // real image references to the provider, not just described in text.
-      const referenceImages: { mime: string; data: string }[] = [];
-      let hasSheet = false;
-      if (char.characterSheetId) {
-        const sheet = await this.characterRepo.findSheetById(char.characterSheetId);
-        if (sheet?.sheetImage) {
-          const ref = await storageService.resolveReference(sheet.sheetImage);
-          if (ref) {
-            referenceImages.push(ref);
-            hasSheet = true;
-          }
+        for (const photo of (hero.photos || []).slice(0, 3)) {
+          const ref = await storageService.resolveReference(photo);
+          if (ref) heroRefs.push(ref);
         }
-      }
-      // Cap uploaded photos to keep the request lean and inexpensive.
-      for (const photo of (char.photos || []).slice(0, 3)) {
-        const ref = await storageService.resolveReference(photo);
-        if (ref) referenceImages.push(ref);
+        // Hero references go first so the protagonist's likeness is prioritized.
+        referenceImages.unshift(...heroRefs);
       }
 
-      const sheetDetails = hasSheet
-        ? "An approved character reference sheet is provided as an IMAGE reference (three-view drawing, expression sheet, pose sheet, costume design). Match the hairstyle, clothing colour palette, and facial proportions to it exactly."
-        : (referenceImages.length > 0
-            ? "Reference photos of the real child are provided as IMAGE references. Faithfully preserve the child's facial likeness, hair, and skin tone while re-drawing them in the requested illustration style."
-            : "Use a friendly cartoon styling with distinct features.");
-
-      const imagePrompt = promptEngine.generateIllustrationPrompt(
-        pageNumber,
-        page.illustrationPrompt.replace(/MAIN_CHARACTER/g, book.childName),
-        book.style,
-        char.name,
-        char.description,
-        sheetDetails
+      const scenePrompt = page.illustrationPrompt.replace(/MAIN_CHARACTER/g, book.childName);
+      const storyText = (page.storyText || "").replace(/MAIN_CHARACTER/g, book.childName);
+      const story = storyLibraryService.getStory(book.libraryStoryId);
+      const nameOf = (key: string) => story?.characters.find((c) => c.key === key)?.displayName || key;
+      const layout = layoutPlanStore.getLayoutById(page.layoutId);
+      const imagePrompt = promptEngine.buildTextPageImagePrompt(
+        storyText,
+        scenePrompt,
+        layout.prompt,
+        (page.characterKeys || []).map(nameOf)
       );
 
       await this.jobRepo.update(job.id, { progress: 50 });
 
-      // Reference-conditioned generation. Both providers gracefully fall back to plain
-      // text-to-image when no usable references are supplied.
-      imageUrl = imageProvider === "openai"
+      const imageProvider = db.settings?.imageProvider || "gemini";
+      const dataUri = imageProvider === "openai"
         ? await openaiProvider.generateImageWithReferences(imagePrompt, referenceImages)
         : (imageProvider === "procedural"
             ? geminiProvider.createProceduralIllustration(imagePrompt, book.style)
             : await geminiProvider.generateImageWithReferences(imagePrompt, referenceImages, book.style));
-    }
 
-    // Offload the rendered page image to GCS (returns a /api/images/... URL). Done after any
-    // stock-illustration caching above, which needs the raw data URI. Degrades to the inline
-    // data URI if storage is disabled or the upload fails.
-    imageUrl = await storageService.uploadDataUri(imageUrl, `illustrations/${bookId}/${pageNumber}-${Date.now()}`);
+      // Offload to GCS (returns a /api/images/... URL); degrades to the inline data URI if
+      // storage is disabled or the upload fails.
+      imageUrl = await storageService.uploadDataUri(dataUri, `illustrations/${bookId}/${pageNumber}-${Date.now()}`);
+    }
 
     await this.bookRepo.updatePage(bookId, pageNumber, {
       imageUrl,

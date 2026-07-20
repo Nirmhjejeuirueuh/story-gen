@@ -6,21 +6,11 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { Book, BookPage } from "../types.js";
 import { personalizeStoryText } from "../utils/personalize.js";
-import { BookOpen, Grid, ChevronLeft, ChevronRight, Sparkles, Image as ImageIcon, Languages, Pencil, GripHorizontal, Save, RotateCcw, Loader2 } from "lucide-react";
+import { BookOpen, Grid, ChevronLeft, ChevronRight, Sparkles, Image as ImageIcon } from "lucide-react";
 
 interface BookPreviewProps {
   book: Book;
 }
-
-// Languages the reader can switch between. Only English is populated today; others gracefully
-// fall back to English until on-demand translations exist.
-const SUPPORTED_LANGUAGES: { code: string; label: string }[] = [
-  { code: "en", label: "English" },
-  { code: "ja", label: "日本語" },
-  { code: "es", label: "Español" },
-  { code: "fr", label: "Français" },
-  { code: "de", label: "Deutsch" },
-];
 
 const SERIF = "'Iowan Old Style', 'Palatino Linotype', 'Palatino', Georgia, 'Times New Roman', serif";
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -49,79 +39,8 @@ function CornerFlourish({ position }: { position: "tl" | "tr" | "bl" | "br" }) {
   );
 }
 
-/** Splits a text blob into paragraphs for HTML rendering. */
-function toParagraphs(text: string): string[] {
-  const parts = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-  return parts.length ? parts : [text.trim()].filter(Boolean);
-}
-
-/** Default text position when a page has no manual override: alternates by spread for rhythm. */
-function autoZone(pageNumber: number): "top" | "bottom" {
-  return Math.floor((pageNumber - 1) / 2) % 2 === 0 ? "top" : "bottom";
-}
-
 export default function BookPreview({ book }: BookPreviewProps) {
   const [viewMode, setViewMode] = useState<"flip" | "grid">("flip");
-  const [lang, setLang] = useState("en");
-
-  // ---- Manual layout editor (drag text to top/bottom, save, persists per page) ----
-  const [editMode, setEditMode] = useState(false);
-  // Local overrides applied on top of page.textZone until the book prop refetches from the
-  // server; "auto" is an explicit sentinel (distinct from unset) so Reset shows the automatic
-  // position immediately even if page.textZone from props is still the stale saved value.
-  const [pendingZones, setPendingZones] = useState<Record<number, "top" | "bottom" | "auto">>({});
-  const [savingPage, setSavingPage] = useState<number | null>(null);
-  const [pageMsg, setPageMsg] = useState<Record<number, string>>({});
-
-  const resolveZone = useCallback(
-    (page: BookPage): "top" | "bottom" => {
-      const pending = pendingZones[page.pageNumber];
-      if (pending === "top" || pending === "bottom") return pending;
-      if (pending === "auto") return autoZone(page.pageNumber);
-      return page.textZone ?? autoZone(page.pageNumber);
-    },
-    [pendingZones]
-  );
-
-  // Drag handle nudges the local zone immediately (live preview); Save persists it, Reset clears
-  // the override back to automatic. The reserved-zone-only, fixed-size design keeps the print
-  // canvas's 1:1 ratio untouched — only which half the text sits in ever changes.
-  const nudgeZone = useCallback((pageNumber: number, zone: "top" | "bottom") => {
-    setPendingZones((z) => ({ ...z, [pageNumber]: zone }));
-    setPageMsg((m) => ({ ...m, [pageNumber]: "" }));
-  }, []);
-
-  const saveLayout = useCallback(
-    async (pageNumber: number, zone: "top" | "bottom" | null) => {
-      setSavingPage(pageNumber);
-      setPageMsg((m) => ({ ...m, [pageNumber]: "" }));
-      try {
-        const res = await fetch(`/api/books/${book.id}/pages/${pageNumber}/layout`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ textZone: zone }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        setPendingZones((z) => ({ ...z, [pageNumber]: zone ?? "auto" }));
-        setPageMsg((m) => ({ ...m, [pageNumber]: zone ? "Layout saved" : "Reset to automatic" }));
-      } catch {
-        setPageMsg((m) => ({ ...m, [pageNumber]: "Couldn't save — try again" }));
-      } finally {
-        setSavingPage(null);
-      }
-    },
-    [book.id]
-  );
-
-  // Resolve a page's text in the active language, falling back to English/storyText, then personalize.
-  const pageText = useCallback(
-    (page: BookPage): string => {
-      const raw = page.texts?.[lang] ?? page.texts?.en ?? page.storyText;
-      return personalizeStoryText(raw, book.childName);
-    },
-    [lang, book.childName]
-  );
-  const isTranslated = (page: BookPage): boolean => lang === "en" || !!page.texts?.[lang];
 
   // ---- Build the ordered list of single-page "faces": [Cover, ...story pages, The End] ----
   const faces = useMemo(() => {
@@ -130,30 +49,14 @@ export default function BookPreview({ book }: BookPreviewProps) {
     book.pages
       .slice()
       .sort((a, b) => a.pageNumber - b.pageNumber)
-      .forEach((p) =>
-        nodes.push(
-          <PageFace
-            page={p}
-            text={pageText(p)}
-            translated={isTranslated(p)}
-            zone={resolveZone(p)}
-            editMode={editMode}
-            saving={savingPage === p.pageNumber}
-            message={pageMsg[p.pageNumber]}
-            onNudgeZone={(z) => nudgeZone(p.pageNumber, z)}
-            onSave={() => saveLayout(p.pageNumber, resolveZone(p))}
-            onReset={() => saveLayout(p.pageNumber, null)}
-          />
-        )
-      );
+      .forEach((p) => nodes.push(<PageFace page={p} />));
     // The End must land on the BACK of the final leaf so the last view shows it as a lone page
     // (mirroring the lone cover at the start). That needs an odd number of faces before it; when
     // it's even, slip a blank leaf-side in first. This also keeps the total even (clean leaves).
     if (nodes.length % 2 === 0) nodes.push(<BlankFace />);
     nodes.push(<EndFace childName={book.childName} />);
     return nodes;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [book, pageText, lang, resolveZone, editMode, savingPage, pageMsg, nudgeZone, saveLayout]);
+  }, [book]);
 
   const leafCount = faces.length / 2;
 
@@ -251,52 +154,15 @@ export default function BookPreview({ book }: BookPreviewProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [viewMode]);
 
-  // The layout editor only applies to the flip book (Thumbnail Grid doesn't render PageFace),
-  // so leaving flip view exits edit mode to avoid a dangling, inert "Editing Layout" state.
-  useEffect(() => {
-    if (viewMode !== "flip") setEditMode(false);
-  }, [viewMode]);
-
   return (
     <div className="space-y-6" id="book-preview">
       {/* Header controls */}
       <div className="flex flex-wrap justify-between items-center gap-3 bg-slate-50 border border-slate-200 p-3.5 rounded-2xl">
         <div>
           <h4 className="font-bold text-slate-800 text-sm">Interactive Storybook Preview</h4>
-          <p className="text-[11px] text-slate-400 font-medium">
-            {editMode ? "Drag the ⁝⁝ handle to move text top/bottom, then Save." : "Click or drag a page to turn it."}
-          </p>
+          <p className="text-[11px] text-slate-400 font-medium">Click or drag a page to turn it.</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5">
-            <Languages className="h-3.5 w-3.5 text-emerald-600" />
-            <select
-              value={lang}
-              onChange={(e) => setLang(e.target.value)}
-              className="text-xs font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer"
-              title="Reading language"
-            >
-              {SUPPORTED_LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {viewMode === "flip" && (
-            <button
-              onClick={() => setEditMode((v) => !v)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 border ${
-                editMode
-                  ? "bg-amber-600 text-white border-amber-600 shadow-sm"
-                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              <Pencil className="h-3.5 w-3.5" /> {editMode ? "Editing Layout" : "Customize Layout"}
-            </button>
-          )}
-
           <div className="flex gap-1.5 bg-slate-200/60 p-1 rounded-xl">
             <button
               onClick={() => setViewMode("flip")}
@@ -483,11 +349,13 @@ export default function BookPreview({ book }: BookPreviewProps) {
                   Page {p.pageNumber}
                 </span>
               </div>
-              <div className="p-3 bg-slate-50/50 border-t border-slate-100">
-                <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed text-center" style={{ fontFamily: SERIF }}>
-                  {pageText(p)}
-                </p>
-              </div>
+              {p.storyText && (
+                <div className="p-3 bg-slate-50/50 border-t border-slate-100">
+                  <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed text-center" style={{ fontFamily: SERIF }}>
+                    {personalizeStoryText(p.storyText, book.childName)}
+                  </p>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -531,94 +399,16 @@ function Page({ children }: { children: React.ReactNode }) {
 // mirroring the PuddlePages look. Applied to the <img> element.
 const FEATHER = "radial-gradient(118% 122% at 50% 50%, #000 68%, rgba(0,0,0,0) 100%)";
 
-interface PageFaceProps {
-  page: BookPage;
-  text: string;
-  translated: boolean;
-  /** Resolved text position: manual override (saved or pending) or the automatic alternation. */
-  zone: "top" | "bottom";
-  editMode: boolean;
-  saving: boolean;
-  message?: string;
-  onNudgeZone: (zone: "top" | "bottom") => void;
-  onSave: () => void;
-  onReset: () => void;
-}
-
-function PageFace({ page, text, translated, zone, editMode, saving, message, onNudgeZone, onSave, onReset }: PageFaceProps) {
-  const paragraphs = toParagraphs(text);
-  const textOnTop = zone === "top";
-
-  // Drag-to-reposition: grabbing the handle and moving past a threshold flips the zone once per
-  // gesture. Deliberately delta-based (not absolute page-coordinate hit testing) — this book's
-  // pages sit inside a 3D-transformed flip leaf, where live getBoundingClientRect reads have
-  // proven unreliable, so a simple relative-movement threshold is both simpler and more robust.
-  const dragState = useRef<{ startY: number; flipped: boolean } | null>(null);
-  const FLIP_THRESHOLD = 46;
-  const onHandlePointerDown = (e: React.PointerEvent) => {
-    e.stopPropagation(); // don't let the book's page-turn handler also see this gesture
-    dragState.current = { startY: e.clientY, flipped: false };
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-  };
-  const onHandlePointerMove = (e: React.PointerEvent) => {
-    const d = dragState.current;
-    if (!d || d.flipped) return;
-    const delta = e.clientY - d.startY;
-    if (zone === "top" && delta > FLIP_THRESHOLD) {
-      d.flipped = true;
-      onNudgeZone("bottom");
-    } else if (zone === "bottom" && delta < -FLIP_THRESHOLD) {
-      d.flipped = true;
-      onNudgeZone("top");
-    }
-  };
-  const onHandlePointerUp = (e: React.PointerEvent) => {
-    e.stopPropagation();
-    dragState.current = null;
-  };
-
-  // Text takes only the height it needs (capped at half the page); the illustration absorbs ALL
-  // remaining space so there is never a dead gap, and the art stays large — the PuddlePages feel.
-  const textBlock = (
-    <div className={`shrink-0 overflow-hidden ${textOnTop ? "mb-[3%]" : "mt-[3%]"}`} style={{ maxHeight: "52%" }}>
-      {page.title && (
-        <div className="mb-2.5">
-          <h3 className="text-center text-[#5b4321] leading-tight" style={{ fontFamily: SERIF, fontSize: "clamp(15px, 2.3vw, 25px)", fontWeight: 700 }}>
-            {page.title}
-          </h3>
-          <div className="flex items-center justify-center gap-2 mt-1.5 text-amber-700/50">
-            <span className="h-px w-8 bg-current" />
-            <span className="text-[11px] leading-none">&#10087;</span>
-            <span className="h-px w-8 bg-current" />
-          </div>
-        </div>
-      )}
-
-      {/* Story text (HTML/CSS — never baked into the illustration) */}
-      <div className="text-[#39301f]" style={{ fontFamily: SERIF, fontSize: "clamp(13px, 1.75vw, 19px)", lineHeight: 1.62, textAlign: "justify" }}>
-        {paragraphs.map((para, idx) => (
-          <p key={idx} className={idx === 0 ? "" : "mt-2"} style={{ textIndent: idx === 0 ? 0 : "1.4em" }}>
-            {idx === 0 && para.length > 0 ? (
-              <>
-                <span className="float-left mr-1.5 text-[#7a531f]" style={{ fontFamily: SERIF, fontSize: "3em", lineHeight: 0.72, fontWeight: 700 }}>
-                  {para.charAt(0)}
-                </span>
-                {para.slice(1)}
-              </>
-            ) : (
-              para
-            )}
-          </p>
-        ))}
-        {!translated && <span className="block mt-2 text-[10px] text-amber-700/70 italic clear-both">Showing English — not translated yet</span>}
-      </div>
-    </div>
-  );
-
+/**
+ * A single storybook page: the story text is baked directly into the generated image (see
+ * PromptEngine.buildTextPageImagePrompt), so this is just a full-bleed illustration — no separate
+ * HTML text overlay.
+ */
+function PageFace({ page }: { page: BookPage }) {
   const imageBlock =
     page.imageStatus === "Completed" && page.imageUrl ? (
-      // Background-image fills the whole remaining region (no <img> intrinsic-size quirks), scaled
-      // to show the entire illustration (no crop), then feathered so its edges melt into the page.
+      // Background-image fills the whole page (no <img> intrinsic-size quirks), scaled to show
+      // the entire illustration (no crop), then feathered so its edges melt into the page.
       <div
         className="flex-1 min-h-0"
         style={{
@@ -642,72 +432,9 @@ function PageFace({ page, text, translated, zone, editMode, saving, message, onN
       </div>
     );
 
-  // The handle sits on the boundary between the text and image blocks — dragging it toward the
-  // opposite half swaps their order. Reserved-zone-only: it can never land on top of the image.
-  const dragHandle = editMode && (
-    <div
-      className="shrink-0 flex justify-center py-1 -my-0.5 cursor-grab active:cursor-grabbing touch-none"
-      style={{ zIndex: 5 }}
-      onPointerDown={onHandlePointerDown}
-      onPointerMove={onHandlePointerMove}
-      onPointerUp={onHandlePointerUp}
-      onPointerCancel={onHandlePointerUp}
-      title="Drag up or down to move the text"
-    >
-      <div className="flex items-center gap-1 bg-amber-700/90 text-white rounded-full px-2.5 py-1 shadow-md">
-        <GripHorizontal className="h-3 w-3" />
-        <span className="text-[9px] font-bold uppercase tracking-wide">Drag text</span>
-      </div>
-    </div>
-  );
-
   return (
     <Page>
-      {editMode && (
-        <div className="absolute top-[4%] right-[4%] z-10 flex flex-col items-end gap-1">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSave();
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              disabled={saving}
-              className="flex items-center gap-1 bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-full shadow-sm disabled:opacity-60"
-            >
-              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onReset();
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              disabled={saving}
-              className="flex items-center gap-1 bg-white/90 hover:bg-white text-slate-600 text-[10px] font-bold px-2.5 py-1.5 rounded-full shadow-sm border border-slate-200 disabled:opacity-60"
-              title="Revert to automatic top/bottom alternation"
-            >
-              <RotateCcw className="h-3 w-3" /> Auto
-            </button>
-          </div>
-          {message && (
-            <span className="text-[10px] font-semibold text-amber-900 bg-white/90 px-2 py-0.5 rounded-full shadow-sm">{message}</span>
-          )}
-        </div>
-      )}
-      {textOnTop ? (
-        <>
-          {textBlock}
-          {dragHandle}
-          {imageBlock}
-        </>
-      ) : (
-        <>
-          {imageBlock}
-          {dragHandle}
-          {textBlock}
-        </>
-      )}
+      {imageBlock}
       <div className="absolute bottom-[2.5%] left-0 right-0 text-center pointer-events-none">
         <span className="text-[11px] font-semibold text-amber-900/50" style={{ fontFamily: SERIF, textShadow: "0 1px 3px rgba(246,239,221,0.95)" }}>
           &middot; {page.pageNumber} &middot;

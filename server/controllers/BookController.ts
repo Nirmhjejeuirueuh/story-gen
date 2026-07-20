@@ -8,6 +8,7 @@ import { BookRepository } from "../repositories/BookRepository.js";
 import { JobRepository } from "../repositories/JobRepository.js";
 import { QueueService } from "../services/QueueService.js";
 import { storyLibraryService } from "../services/StoryLibraryService.js";
+import { storyLibraryController } from "./StoryLibraryController.js";
 import { JobType, Book, BookPage, IllustrationStyle } from "../../src/types.js";
 import { AuthedRequest } from "../middleware/auth.js";
 
@@ -37,9 +38,14 @@ export class BookController {
   }
 
   /**
-   * Creates a book directly from a fixed-cast filesystem Story Library entry.
-   * No personalized character, style choice, or AI text generation is involved -
-   * pages are built synchronously from the hand-authored chapter illustration prompts.
+   * Creates a book directly from a Story Library entry, using the story's pre-generated
+   * TEMPLATE pages (story text + layout + illustration prompt, with text baked into the image at
+   * generation time — see StoryLibraryController). If the story has no generated pages yet, they
+   * are generated now (auto-generate on first use) rather than requiring an admin step first.
+   *
+   * Generic books (no characterId) reuse the template's already-rendered page image directly —
+   * instant, no Gemini spend. Personalized books (characterId set) need the child's face baked
+   * into a fresh render, so each page is queued as an IMAGE job (see QueueService.executeImageJob).
    */
   public createBookFromLibrary = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -55,15 +61,23 @@ export class BookController {
         return;
       }
 
-      const pages: BookPage[] = story.chapters.map((chapter) => ({
-        id: "page_" + Math.random().toString(36).substring(2, 11),
-        pageNumber: chapter.pageNumber,
-        storyText: chapter.storyText,
-        illustrationPrompt: chapter.illustrationPrompt,
-        characterKeys: chapter.characterKeys,
-        imageStatus: "Queued",
-        createdAt: new Date().toISOString()
-      }));
+      const templatePages = await storyLibraryController.ensurePagesGenerated(libraryStoryId);
+      const isPersonalized = !!characterId;
+
+      const pages: BookPage[] = templatePages.map((tp) => {
+        const reusable = !isPersonalized && !!tp.imageUrl;
+        return {
+          id: "page_" + Math.random().toString(36).substring(2, 11),
+          pageNumber: tp.pageNumber,
+          storyText: tp.storyText,
+          illustrationPrompt: tp.illustrationPrompt,
+          characterKeys: tp.characterKeys,
+          layoutId: tp.layoutId,
+          imageUrl: reusable ? tp.imageUrl : undefined,
+          imageStatus: reusable ? "Completed" : "Queued",
+          createdAt: new Date().toISOString()
+        };
+      });
 
       const castNames = story.characters.map((c) => c.displayName).join(", ");
 
@@ -88,6 +102,14 @@ export class BookController {
 
       const saved = await this.bookRepo.create(book);
       console.log(`[BookController] Storybook created from library entry: ${saved.id} (${story.id})`);
+
+      // Queue image rendering for every page that couldn't reuse a template image (all pages if
+      // personalized; only not-yet-rendered pages if generic — e.g. the story's very first book).
+      for (const page of pages) {
+        if (page.imageStatus === "Queued") {
+          await this.queueService.addJob(JobType.IMAGE, { bookId: saved.id, pageNumber: page.pageNumber });
+        }
+      }
 
       res.status(201).json({
         message: "Storybook created from story library template.",
@@ -252,45 +274,6 @@ export class BookController {
     }
   };
 
-  /**
-   * Saves (or clears) a page's manual text-position override from the Book Preview layout
-   * editor. Confined to "top" | "bottom" — a reserved zone, never over the illustration — so
-   * the fixed 1:1 print canvas can never be put at risk. `textZone: null` resets the page back
-   * to automatic alternation.
-   */
-  public updatePageLayout = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id, pageNumber } = req.params;
-      const { textZone } = req.body;
-      if (textZone !== "top" && textZone !== "bottom" && textZone !== null) {
-        res.status(400).json({ error: "Field 'textZone' must be 'top', 'bottom', or null." });
-        return;
-      }
-
-      const book = await this.bookRepo.findById(id);
-      if (!book || !this.canModifyBook(book, req as AuthedRequest)) {
-        res.status(404).json({ error: "Book not found." });
-        return;
-      }
-
-      const pageNum = Number(pageNumber);
-      const page = book.pages.find((p) => p.pageNumber === pageNum);
-      if (!page) {
-        res.status(404).json({ error: "Page not found." });
-        return;
-      }
-
-      const updated = await this.bookRepo.updatePage(id, pageNum, { textZone: textZone ?? undefined });
-
-      res.status(200).json({
-        message: textZone ? `Layout saved for page ${pageNum}.` : `Layout reset to automatic for page ${pageNum}.`,
-        page: updated
-      });
-    } catch (error: any) {
-      console.error("[BookController] Error updating page layout:", error);
-      res.status(500).json({ error: "Failed to update page layout: " + error.message });
-    }
-  };
 
   /**
    * Initiates print-ready PDF export job
