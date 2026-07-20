@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IllustrationStyle } from "../../src/types.js";
 import { HOUSE_STYLE } from "../config/config.js";
 
 export class PromptEngine {
@@ -63,6 +62,7 @@ Style constraints: render every section in the house art style above (${HOUSE_ST
     4: "calm, formal, portrait-like moments — introducing a character or a place, quiet dialogue, a clear single focal subject.",
     5: "grand panoramic reveals — a big vista, a new world opening up, a scene meant to feel expansive and awe-inspiring.",
     6: "gentle emotional or magical beats — a climax, a quiet realization, a dream sequence, something meant to feel soft and transitional.",
+    7: "quiet scene-break or mood beats meant to be experienced wordlessly — right after a big reveal, an emotional climax, or a magical transition, where letting the picture breathe alone is more powerful than more text.",
   };
 
   public generatePagesPrompt(
@@ -83,10 +83,12 @@ Available page LAYOUTS — read each one's composition AND its "Best for" fit be
 ${layoutList}
 
 For EACH of the ${numPages} pages, write:
-- "storyText": 1–3 short, warm, simple sentences of narrative for that page. This text will be rendered directly on the page, so keep it concise and easy to read.
-- "layoutId": pick the id whose "Best for" description genuinely matches this page's scene and mood — vary your choices across the book the way a real illustrator would, rather than repeating one favorite. Consecutive pages should usually differ unless the story genuinely calls for the same composition twice in a row.
+- "storyText": 1–3 short, warm, simple sentences of narrative for that page. This text will be rendered directly on the page, so keep it concise and easy to read. EXCEPTION: pages using layout 7 (see below) must have "storyText": "" (empty) — that layout is wordless.
+- "layoutId": pick the id whose "Best for" description genuinely matches this page's scene and mood — vary your choices across the book the way a real illustrator would, rather than repeating one favorite. Consecutive pages should usually differ unless the story genuinely calls for the same composition twice in a row. Layout 7 (wordless full illustration) should appear roughly once every 6-8 pages — never twice in a row — and only right after a natural pause in the story (a big reveal, an emotional beat, a turning point). Whatever plot detail that wordless page would have carried must be folded into the NEXT page's storyText instead, so the narrative never has a gap or feels broken.
 - "illustrationPrompt": a rich, specific description of the scene (setting, characters present, action, mood, lighting), composed WITH the chosen layout in mind — e.g. for a diagonal-flow layout, describe movement flowing across the frame; for a panoramic layout, describe a wide establishing view; for a framed/portrait layout, describe one clear focal subject rather than a crowded scene. Do NOT describe text or typography here — only the visual scene.
 - "characterKeys": the subset of the cast keys above whose characters appear on this page (may be empty).
+
+SAFETY (must follow on every page): never describe a young child or baby completely alone in an isolated, dangerous-looking, or unsupervised scene — no lone infant in open wilderness, no child alone handling fire or a weapon, no child alone at a dangerous height or edge. Always include a companion in frame (another cast member, a parental figure, or a protective animal), or reframe the scene to preserve the story beat without the risky framing. This applies even when the scene description feels true to the classic story.
 
 The narrative must flow from a charming opening (page 1) through rising action to a comforting resolution (page ${numPages}), staying faithful to the classic story and suitable for young children.
 
@@ -105,11 +107,11 @@ Return ONLY valid, parsable JSON in this exact shape, with no markdown fences or
    */
   /**
    * Shared "finish" directive appended to every page image, on top of whichever of the 6
-   * layouts was chosen. Fixes the earlier "basic" look (a plain text box stacked on a plain
-   * picture box) by insisting the whole page reads as ONE continuous hand-painted vintage
-   * storybook page — full-bleed art, no hard seams, ornamental typography treatment.
+   * layouts was chosen. The illustration now fills the whole page edge to edge (no reserved
+   * parchment/text zone) — the story text is layered directly on top of the artwork using a
+   * soft scrim for legibility, like a real picture-book spread rather than a text box on a page.
    */
-  private readonly PROFESSIONAL_FINISH = `Treat the ENTIRE page — text area and illustration area alike — as ONE single continuous hand-painted piece of art, full-bleed to all four edges. Do NOT render the text zone as a separate plain flat white or solid-colour rectangle sitting on top of the picture; the same aged-parchment paper texture, warm lighting, and soft colour palette must run underneath and behind the text exactly as it does through the illustration, so the two areas feel painted on the same page, not pasted together. Add a delicate, understated decorative treatment around the text: a thin hairline or double-rule border (ink or muted gold), and a small ornamental flourish, flourish divider, or a tiny cluster of dots beneath the last line of text. Render the story text in refined, elegant serif or fine calligraphic-style lettering, as if hand-lettered for a beautifully printed antique fairy-tale book. Let the illustration itself bleed all the way to the page edges with a very soft vignette, rather than sitting in a hard-edged box or frame with visible margins. Overall finish: the polished, timeless look of a Golden-Age illustrated children's storybook page — warm, painterly, and cohesive from edge to edge.`;
+  private readonly PROFESSIONAL_FINISH = `The illustration must fill the ENTIRE page edge to edge — full-bleed art covering every pixel, with absolutely no plain background, parchment strip, or empty margin showing anywhere, including directly behind the text. Do NOT add any border, frame, rule line, or corner ornamentation anywhere on the page. Where the story text sits (per the layout instructions above), lay it directly over the artwork using only a soft, irregular cloud-like glow behind the letters that fades unevenly in every direction, like a gentle wash of mist or soft light — just enough to keep the words clearly legible against the scene beneath. This glow must NEVER read as a rectangle, band, panel, or box of any shape, and must have NO visible straight edge, hard boundary, or outline anywhere — if you can trace a line around where it "stops", it is wrong; it should be impossible to say exactly where the glow ends and the illustration resumes. Never use a solid-coloured or parchment-toned panel behind the text; the illustration must stay visible through the glow. Beneath the text, add one small understated decorative flourish or divider (a thin hairline rule, a tiny ornamental swirl, or a cluster of dots) — the only ornamental element allowed on the page. Render the story text in refined, elegant serif or fine calligraphic-style lettering, warm dark sepia or ink-brown, never harsh pure black. Overall finish: one continuous, full-bleed painterly illustration in a warm, vintage storybook watercolor style, with the text gently layered directly on top — never a picture that leaves empty space, a plain background, or any hard-edged shape showing anywhere on the page.`;
 
   public buildTextPageImagePrompt(
     storyText: string,
@@ -118,69 +120,26 @@ Return ONLY valid, parsable JSON in this exact shape, with no markdown fences or
     castNames: string[]
   ): string {
     const cast = castNames.length ? castNames.join(", ") : "";
+    const hasText = storyText.trim().length > 0;
     return `Create ONE finished children's storybook PAGE as a single image, rendered in this exact art style: ${HOUSE_STYLE}.
 
-PAGE LAYOUT — follow this composition precisely for WHERE the text and the scene sit on the page:
+PAGE LAYOUT — follow this composition precisely for WHERE the ${hasText ? "text and the scene sit" : "scene fills the page"}:
 ${layoutPrompt}
 
 FINISH — how the whole page must look and feel (this is what separates a professional storybook page from a rough draft):
 ${this.PROFESSIONAL_FINISH}
 
-RENDER THIS EXACT STORY TEXT on the page, inside the layout's reserved text area, generously sized and fully legible. Spell every word EXACTLY as written, with no extra or missing words:
+${hasText ? `RENDER THIS EXACT STORY TEXT on the page, inside the layout's reserved text area, generously sized and fully legible. Spell every word EXACTLY as written, with no extra or missing words:
 """
 ${storyText}
-"""
+"""` : `This is a WORDLESS page — render NO text, letters, or typography anywhere on the page. The full canvas is the illustration.`}
 
 SCENE to illustrate in the illustration area:
 ${illustrationPrompt}
 ${cast ? `\nKeep these characters perfectly consistent with the provided reference images — same faces, colours, and costumes: ${cast}.` : ""}
 
-Premium printed picture-book quality. The rendered text MUST be spelled correctly, cleanly kerned, and easy for a child to read. Do not add any other text, captions, page numbers, or watermarks beyond the story text above.`;
+Premium printed picture-book quality.${hasText ? " The rendered text MUST be spelled correctly, cleanly kerned, and easy for a child to read." : ""} Do not add any other text, captions, page numbers, or watermarks${hasText ? " beyond the story text above" : ""}.`;
   }
 
-  /**
-   * Generates a prompt for individual page illustrations, emphasizing character consistency using the character sheet.
-   */
-  /**
-   * Hard constraint appended to every PAGE illustration prompt. The app renders the story
-   * text separately as HTML (see BookPreview), so the artwork must contain zero typography.
-   * NOTE: intentionally NOT applied to character-sheet prompts, which want labeled sections.
-   */
-  public readonly NO_TEXT_CONSTRAINT = `ABSOLUTELY NO TEXT IN THE IMAGE: Do not draw, render, or include any letters, words, numbers, captions, titles, labels, speech bubbles, signs, books-with-legible-writing, or written characters of any language anywhere in the illustration. The image must be 100% visual with zero typography — the story text is added separately by the app.`;
-
-  /** Appends the no-text constraint to any page-illustration scene prompt. */
-  public withNoText(prompt: string): string {
-    return `${prompt}\n\n${this.NO_TEXT_CONSTRAINT}`;
-  }
-
-  public generateIllustrationPrompt(
-    pageNumber: number,
-    scenePrompt: string,
-    style: IllustrationStyle,
-    characterName: string,
-    characterDescription: string,
-    characterSheetDescription: string
-  ): string {
-    return `Create a high-quality illustration in "${style}" style for page ${pageNumber} of a children's book.
-
-CRITICAL INSTRUCTION FOR CHARACTER CONSISTENCY:
-You MUST base the main character on the approved character reference sheet described below:
-- Character Name: ${characterName}
-- Appearance/Features: ${characterDescription}
-- Approved Reference Sheet Pose Details: ${characterSheetDescription}
-
-Maintain absolute character consistency! The main character must have the exact same face, same eye color, same hairstyle (color and cut), same clothing colors, and same bodily proportions across this entire book. Never redesign the child.
-
-Scene to illustrate:
-${scenePrompt}
-
-Visual Style guidelines:
-- Style: ${style}
-- Lighting: Charming, cinematic, soft lighting matching the scene mood
-- Background: Highly detailed, beautiful background of the scene (no white background here; illustrate the full scenery)
-- Composition: Dynamic, wide angle, perfectly framing the main character in action while making sure they are clearly visible and match the pose/action in the text.
-
-${this.NO_TEXT_CONSTRAINT}`;
-  }
 }
 export const promptEngine = new PromptEngine();

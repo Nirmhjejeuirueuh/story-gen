@@ -30,37 +30,43 @@ export const PAGE_LAYOUTS: PageLayout[] = [
     layoutId: 1,
     name: "Classic Top Text + Full Illustration Bottom",
     prompt:
-      "Create a traditional children's storybook page layout. Reserve the top 30–35% of the page for story text with a soft cream parchment background. Place the text in a clean centered block with generous margins. The illustration should occupy the lower 65–70% of the page, showing the full scene with depth and detail. Keep all important characters and emotional expressions below the text area. Use elegant serif typography, dark brown text, balanced line spacing, and a premium printed picture book appearance. Make the text and illustration blend naturally like a classic vintage storybook.",
+      "The illustration must fill the ENTIRE page edge to edge, including the area behind the text — there is no plain background strip anywhere. Compose the scene so the top 30% is naturally calmer there (open sky, foliage, a plain wall, distant background) so text overlaid there stays legible, then overlay the story text near the top directly on top of that part of the artwork, using a soft, irregular cloud-like glow behind the letters that fades unevenly in every direction like mist or soft light — NEVER a rectangle, band, or box, and with no visible straight edge or boundary line anywhere. The rest of the scene, and the characters, occupy the lower two-thirds, fully visible with no border around them. Elegant serif typography, warm dark ink.",
   },
   {
     layoutId: 2,
     name: "Floating Text Panel with Illustration Surrounding",
     prompt:
-      "Create a storybook page layout with a soft floating cream parchment text panel placed in the upper center area, covering approximately 30% of the page. Allow the illustration to gently flow around the edges of the text panel with decorative elements such as soft clouds, curtains, leaves, stars, or room details extending toward the text area. Keep main characters positioned in the lower portion of the page. Use elegant serif typography, dark brown text, wide margins, and a handcrafted watercolor picture book style.",
+      "The illustration must fill the ENTIRE page edge to edge with no plain background anywhere. Compose the scene with soft clouds, leaves, curtains, or stars naturally occupying the upper-center area, then overlay the story text directly on top of that part of the artwork using a soft, irregular cloud-like glow behind the letters that fades unevenly in every direction like mist or soft light — NEVER a rectangle, panel, or box, and with no visible straight edge or boundary line anywhere. Keep the main characters clearly visible in the lower portion of the full-bleed scene. Elegant serif typography, warm dark ink, handcrafted watercolor picture-book style.",
   },
   {
     layoutId: 3,
     name: "Top Left Text + Diagonal Illustration Flow",
     prompt:
-      "Design a dynamic children's storybook page. Reserve the upper left 30–35% area for text on a warm cream parchment background. Let the illustration flow diagonally from the lower left toward the upper right, creating a sense of movement and depth. Keep characters grouped in the lower section while decorative background elements gently connect with the text area. Use professional book typography, dark brown serif font, soft watercolor textures, and balanced negative space.",
+      "The illustration must fill the ENTIRE page edge to edge with no plain background anywhere, flowing diagonally from the lower-left toward the upper-right for a sense of movement and depth. Overlay the story text directly on the artwork in the upper-left, over whichever part of the scene is naturally calmest there, using a soft, irregular cloud-like glow behind the letters that fades unevenly in every direction like mist or soft light — NEVER a rectangle, band, or box, and with no visible straight edge or boundary line anywhere. Characters and action stay grouped through the diagonal flow. Professional book typography, dark warm ink, soft watercolor textures.",
   },
   {
     layoutId: 4,
     name: "Full Width Header Text + Framed Illustration",
     prompt:
-      "Create a premium picture book page with a full-width text section across the top 30% of the page. Use a subtle cream paper texture behind the text. Below the text area, create a beautifully framed illustration with soft watercolor edges blending into the page background. Keep the main characters inside the illustration frame and clearly visible. Use elegant children's book serif typography, large readable text, generous margins, and a refined vintage publishing style.",
+      "The illustration must fill the ENTIRE page edge to edge, including behind the text — no plain background strip anywhere and no illustration frame or box. Compose the top of the scene so it reads calmly (sky, wall, distant background), then overlay the story text near the top directly on top of that part of the artwork, using a soft, irregular cloud-like glow behind the letters that fades unevenly in every direction like mist or soft light — this must NEVER read as a rectangle, band, panel, or box of any kind, and must have NO visible straight edge, hard boundary, or outline anywhere. Keep the main characters clearly visible in the rest of the full-bleed scene. Elegant children's book serif typography, large readable text, refined vintage publishing style.",
   },
   {
     layoutId: 5,
     name: "Side Text Column + Large Scene Illustration",
     prompt:
-      "Create a children's storybook layout with a vertical text column occupying approximately 30–35% of the page on the left side. Use a cream parchment background for the text area. Place the main illustration on the right side, filling the remaining space with a detailed watercolor scene. Keep characters away from the text column. Use elegant serif typography, dark brown text, balanced spacing, and a professional picture book composition with strong visual storytelling.",
+      "The illustration must fill the ENTIRE page edge to edge with no plain background anywhere. Compose the scene so its left third reads calmly (sky, water, open ground, a plain wall), then overlay the story text there directly on top of the artwork using a soft, irregular cloud-like glow behind the letters that fades unevenly in every direction like mist or soft light — NEVER a rectangle, column, panel, or box, and with no visible straight edge or boundary line anywhere. The main scene and characters fill the rest of the page in full detail. Elegant serif typography, warm dark ink, strong visual storytelling.",
   },
   {
     layoutId: 6,
     name: "Decorative Top Text with Curved Illustration Transition",
     prompt:
-      "Create a magical children's storybook page layout. Reserve the upper 30–35% for story text inside a softly curved cream parchment area. The bottom illustration should transition upward with organic watercolor shapes, gentle clouds, curtains, or decorative elements blending into the text area. Keep the characters fully visible in the lower section. Use vintage watercolor illustration style, elegant serif typography, dark brown lettering, generous margins, and a seamless premium picture book design.",
+      "The illustration must fill the ENTIRE page edge to edge with no plain background anywhere, using organic, curved composition — clouds, foliage, or flowing shapes. Overlay the story text near the top directly on the artwork, over whichever part of the scene naturally reads calmest, using a soft, irregular cloud-like glow behind the letters that fades unevenly in every direction like mist or soft light — NEVER a rectangle, panel, or box (curved or otherwise), and with no visible straight edge or boundary line anywhere. Characters stay fully visible in the rest of the full-bleed scene. Vintage watercolor illustration style, elegant serif typography, warm dark ink.",
+  },
+  {
+    layoutId: 7,
+    name: "Full Illustration — No Text",
+    prompt:
+      "Create a single, full-bleed children's storybook illustration occupying the ENTIRE page from edge to edge — a wordless page meant to be experienced purely through imagery, with NO reserved text area anywhere on the page and NO border or frame of any kind. Render one complete, richly detailed painterly scene using the full canvas as a visual pause in the story. Maintain the same warm watercolor art style as every other page in the book so it still feels like part of the same storybook, but reserve absolutely no space for typography.",
   },
 ];
 
