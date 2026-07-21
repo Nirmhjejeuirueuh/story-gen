@@ -145,6 +145,19 @@ export interface TemplateCharacterDoc {
   displaySheetImageUrl?: string; // optional generated multi-view pose sheet — DISPLAY only
   approved: boolean;
   createdAt: string;
+  // When true, this character's reference photo is never sent as an image-conditioning input
+  // on a page it shares with another character (only described in the text prompt). Set on
+  // antagonist/dangerous-animal cast members (e.g. Shere Khan).
+  textOnlyNearHumans?: boolean;
+  // When true, on any page this character shares with a `textOnlyNearHumans`-flagged character,
+  // THIS character's own reference photo is also dropped (text-only), in addition to the
+  // antagonist's. In isolated testing (t10-the-jungle-book, Mowgli vs Shere Khan) this downgraded
+  // a hard, deterministic Gemini image-safety block (PROHIBITED_CONTENT) to a soft, retriable one
+  // (IMAGE_SAFETY). NOTE: a later full-pipeline batch run still failed on some Jungle Book pages
+  // (including ones with no antagonist present), so this flag helps but is not a complete fix by
+  // itself — the remaining failure mode is not yet understood. Set on human/child protagonists
+  // who appear in danger scenes with a flagged antagonist.
+  dropReferenceNearAntagonist?: boolean;
 }
 
 export enum JobType {

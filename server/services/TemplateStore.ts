@@ -175,6 +175,82 @@ export class TemplateStore {
     }
   }
 
+  /**
+   * Adds any filesystem cast members that are missing from a template's `characters`
+   * subcollection in Firestore, without touching characters that already exist there. Needed
+   * because `seedFromFilesystem` only runs once (when the collection is first empty) — cast
+   * members added to disk afterward otherwise never reach Firestore, and the frontend only ever
+   * reads the Firestore-backed cache. Returns the keys that were newly added.
+   */
+  async syncMissingCharacters(storyId: string): Promise<string[]> {
+    const story = storyLibraryService.getStory(storyId);
+    if (!story) return [];
+
+    const storyRef = this.col().doc(storyId);
+    const existingSnap = await storyRef.collection("characters").get();
+    const existingKeys = new Set(existingSnap.docs.map((d) => d.id));
+
+    const missing = story.characters.filter((c) => !existingKeys.has(c.key));
+    if (missing.length === 0) return [];
+
+    const now = new Date().toISOString();
+    const newDocs: TemplateCharacterDoc[] = missing.map((character) => ({
+      key: character.key,
+      name: character.displayName,
+      prompt: storyLibraryService.getCharacterDescription(storyId, character.key),
+      sheetImageUrl: `/api/story-library/${storyId}/characters/${encodeURIComponent(character.key)}/image`,
+      approved: true,
+      createdAt: now,
+    }));
+
+    const batch = this.db.batch();
+    for (const charDoc of newDocs) {
+      batch.set(storyRef.collection("characters").doc(charDoc.key), clean(charDoc));
+    }
+    await batch.commit();
+
+    const entry = this.cache.get(storyId);
+    if (entry) {
+      entry.characters = [...entry.characters, ...newDocs].sort((a, b) => a.key.localeCompare(b.key));
+    }
+
+    return missing.map((c) => c.key);
+  }
+
+  /** Raw cast character docs for a template (with textOnlyNearHumans etc.), or null if not cached. */
+  getCharacters(storyId: string): TemplateCharacterDoc[] | null {
+    const entry = this.cache.get(storyId);
+    return entry ? [...entry.characters] : null;
+  }
+
+  /**
+   * Flags/unflags a cast character as "text-only near humans" — its reference photo is never
+   * sent as an image-conditioning input on a page it shares with another character (only
+   * described in the text prompt). See the field's doc comment in src/types.ts for why this
+   * exists (a confirmed Gemini image-safety block on child + dangerous-animal reference photos
+   * together, regardless of scene tone).
+   */
+  async setTextOnlyNearHumans(storyId: string, key: string, value: boolean): Promise<void> {
+    const normalizedKey = key.trim().toLowerCase();
+    await this.col().doc(storyId).collection("characters").doc(normalizedKey).set({ textOnlyNearHumans: value }, { merge: true });
+    const entry = this.cache.get(storyId);
+    const cached = entry?.characters.find((c) => c.key === normalizedKey);
+    if (cached) cached.textOnlyNearHumans = value;
+  }
+
+  /**
+   * Flags/unflags a human/child protagonist as "drop my own reference photo on pages I share
+   * with a textOnlyNearHumans-flagged antagonist". See the field's doc comment in src/types.ts —
+   * this downgrades a hard, deterministic Gemini image-safety block to a soft, retriable one.
+   */
+  async setDropReferenceNearAntagonist(storyId: string, key: string, value: boolean): Promise<void> {
+    const normalizedKey = key.trim().toLowerCase();
+    await this.col().doc(storyId).collection("characters").doc(normalizedKey).set({ dropReferenceNearAntagonist: value }, { merge: true });
+    const entry = this.cache.get(storyId);
+    const cached = entry?.characters.find((c) => c.key === normalizedKey);
+    if (cached) cached.dropReferenceNearAntagonist = value;
+  }
+
   /** Raw generated page docs for a template (with layoutId/imageUrl), or null if not cached. */
   getPages(storyId: string): TemplatePageDoc[] | null {
     const entry = this.cache.get(storyId);

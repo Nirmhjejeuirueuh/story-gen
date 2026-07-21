@@ -15,6 +15,27 @@ import { db } from "../database/db.js";
 import { IllustrationStyle, TemplatePageDoc } from "../../src/types.js";
 import { DEFAULT_LAYOUT_PLAN_ID } from "../config/layouts.js";
 
+/**
+ * Extracts the single balanced { ... } JSON object from a text-model response, ignoring any
+ * markdown fences or stray trailing text the model appends after the real object (seen in the
+ * wild: the model duplicating a closing "]}" after an already-complete, valid JSON object —
+ * a plain `JSON.parse` on the whole response fails on that trailing junk even though the actual
+ * page data is fine). Throws if no balanced object is found.
+ */
+function extractJsonObject(text: string): string {
+  const start = text.indexOf("{");
+  if (start === -1) throw new Error("No JSON object found in model output.");
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  throw new Error("Unbalanced JSON object in model output.");
+}
+
 export class StoryLibraryController {
   /** The catalogue of page layouts the AI/editor can choose from (served for the editor UI). */
   public listLayouts = async (_req: Request, res: Response): Promise<void> => {
@@ -50,7 +71,7 @@ export class StoryLibraryController {
 
     let parsed: any;
     try {
-      parsed = JSON.parse(jsonText.replace(/```json/gi, "").replace(/```/g, "").trim());
+      parsed = JSON.parse(extractJsonObject(jsonText));
     } catch {
       throw new Error("Page generation output was not valid JSON. Please try again.");
     }
@@ -154,9 +175,25 @@ export class StoryLibraryController {
     const story = templateStore.getStory(id) ?? storyLibraryService.getStory(id);
     const nameOf = (key: string) => story?.characters.find((c) => c.key === key)?.displayName || key;
 
+    // Characters flagged textOnlyNearHumans (e.g. Shere Khan) never get their reference photo
+    // sent alongside another character's, and characters flagged dropReferenceNearAntagonist
+    // (e.g. Mowgli) additionally drop their OWN photo on any page they share with one of those
+    // antagonists — see the field doc comments in src/types.ts. Both are still described in the
+    // text prompt as normal, just not photo-conditioned on the affected pages; alone (or without
+    // an antagonist present), a character's own reference photo is used as normal.
+    const pageKeys = page.characterKeys || [];
+    const rawChars = templateStore.getCharacters(id) || [];
+    const antagonistKeys = new Set(rawChars.filter((c) => c.textOnlyNearHumans).map((c) => c.key));
+    const dropNearAntagonistKeys = new Set(rawChars.filter((c) => c.dropReferenceNearAntagonist).map((c) => c.key));
+    const antagonistOnPage = pageKeys.some((k) => antagonistKeys.has(k));
+
     // Condition on the referenced cast members' reference sheets so faces/costumes stay consistent.
     const references = (await Promise.all(
-      (page.characterKeys || []).map((key) => storyLibraryService.getCharacterImageBase64(id, key))
+      pageKeys.map((key) => {
+        if (antagonistKeys.has(key) && pageKeys.length > 1) return Promise.resolve(null);
+        if (antagonistOnPage && dropNearAntagonistKeys.has(key)) return Promise.resolve(null);
+        return storyLibraryService.getCharacterImageBase64(id, key);
+      })
     )).filter((ref): ref is { mime: string; data: string } => !!ref);
 
     const layout = layoutPlanStore.getLayoutById(page.layoutId);

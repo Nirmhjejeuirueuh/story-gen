@@ -1,0 +1,1 @@
+Fritz, the eldest son, a tall athletic teenage boy of fifteen with tousled brown hair, confident bright eyes and a bold adventurous grin, wearing a practical rolled-sleeve shirt, strong and quick to act
