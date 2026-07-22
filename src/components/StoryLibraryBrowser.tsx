@@ -7,7 +7,7 @@ import React, { useEffect, useState } from "react";
 import { StoryLibraryEntry } from "../types.js";
 import {
   Library, Sparkles, Users, ChevronDown, ChevronUp, Tag, X, Loader2, FileText, Wand2,
-  Save, Image as ImageIcon,
+  Save, Image as ImageIcon, Palette,
 } from "lucide-react";
 
 interface SelectedCharacter {
@@ -24,6 +24,13 @@ interface CharacterDetail {
   displaySheetImageUrl: string | null;
 }
 
+interface ArtStyleOption {
+  id: string;
+  label: string;
+}
+
+const DEFAULT_STYLE_ID = "vintage-watercolor";
+
 /** One generated template page (server shape: TemplatePageDoc). Layout is AI-chosen, not user-editable. */
 interface TemplatePage {
   pageNumber: number;
@@ -31,7 +38,8 @@ interface TemplatePage {
   illustrationPrompt: string;
   characterKeys?: string[];
   layoutId?: number;
-  imageUrl?: string;
+  imageUrl?: string; // the DEFAULT style's image
+  imageUrls?: Record<string, string>; // image per style id
 }
 
 interface StoryLibraryBrowserProps {
@@ -43,6 +51,58 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
   const [stories, setStories] = useState<StoryLibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingId, setCreatingId] = useState<string | null>(null);
+
+  // Art style switcher: one global choice that every story's cast avatars/preview render in.
+  // Vintage Watercolor is always available (it's the original art, generated up front); other
+  // styles are rendered lazily per story the first time you switch to them.
+  const [styles, setStyles] = useState<ArtStyleOption[]>([{ id: DEFAULT_STYLE_ID, label: "Vintage Watercolor" }]);
+  // Persisted so the picked style survives a reload. localStorage can throw outright (Safari
+  // private mode, blocked third-party storage), and an unguarded throw in a useState initializer
+  // takes the whole page down — so remembering the choice must never be load-bearing.
+  const [styleId, setStyleIdState] = useState<string>(() => {
+    try {
+      return localStorage.getItem("storyLibraryStyleId") || DEFAULT_STYLE_ID;
+    } catch {
+      return DEFAULT_STYLE_ID;
+    }
+  });
+  const setStyleId = (id: string) => {
+    setStyleIdState(id);
+    try {
+      localStorage.setItem("storyLibraryStyleId", id);
+    } catch { /* non-fatal: the style just won't persist across reloads */ }
+  };
+  const [castImgVersion, setCastImgVersion] = useState(0); // bumped after a per-story style generation, to bust <img> caches
+  const [generatingCastForStory, setGeneratingCastForStory] = useState<string | null>(null);
+  const [castMissingForStory, setCastMissingForStory] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    fetch("/api/styles")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (Array.isArray(data) && data.length) setStyles(data); })
+      .catch(() => {});
+  }, []);
+
+  // Switching styles: nothing to fetch up front — each story's cast avatars just start
+  // requesting `?styleId=`, and any that 404 (not generated for this style yet) flip
+  // castMissingForStory so that story's card offers a one-click "Generate cast" action.
+  useEffect(() => {
+    setCastMissingForStory({});
+  }, [styleId]);
+
+  const generateCastForStory = async (story: StoryLibraryEntry) => {
+    setGeneratingCastForStory(story.id);
+    try {
+      const res = await fetch(`/api/story-library/${story.id}/styles/${encodeURIComponent(styleId)}/generate-cast`, { method: "POST" });
+      if (!res.ok) throw new Error("Generation failed");
+      setCastMissingForStory((m) => ({ ...m, [story.id]: false }));
+      setCastImgVersion((v) => v + 1);
+    } catch (err) {
+      console.error(`Failed to generate ${story.id}'s cast in style ${styleId}:`, err);
+    } finally {
+      setGeneratingCastForStory(null);
+    }
+  };
 
   // The single "Generate" accordion (any signed-in user): which story's page list is open, its pages,
   // and per-page editor state. Only one story's panel is open at a time.
@@ -71,7 +131,7 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
       const res = await fetch(`/api/story-library/${selectedChar.storyId}/characters/${encodeURIComponent(selectedChar.key)}/regenerate-sheet`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ styleId }),
       });
       const data = res.ok ? await res.json() : null;
       if (!data?.displaySheetImageUrl) throw new Error("Generation failed");
@@ -94,13 +154,13 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
     setCharDetail(null);
     setSheetError(null);
     setSheetGenerating(false);
-    fetch(`/api/story-library/${selectedChar.storyId}/characters/${encodeURIComponent(selectedChar.key)}`)
+    fetch(`/api/story-library/${selectedChar.storyId}/characters/${encodeURIComponent(selectedChar.key)}?styleId=${encodeURIComponent(styleId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (!cancelled) setCharDetail(data); })
       .catch(() => { if (!cancelled) setCharDetail(null); })
       .finally(() => { if (!cancelled) setCharDetailLoading(false); });
     return () => { cancelled = true; };
-  }, [selectedChar]);
+  }, [selectedChar, styleId]);
 
   // Close the pop-up on Escape.
   useEffect(() => {
@@ -168,6 +228,10 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
   const patchPageLocal = (pageNumber: number, patch: Partial<TemplatePage>) =>
     setPages((prev) => prev.map((p) => (p.pageNumber === pageNumber ? { ...p, ...patch } : p)));
 
+  /** The rendered page image for the currently selected art style, if one has been generated. */
+  const pageImageFor = (page: TemplatePage): string | undefined =>
+    page.imageUrls?.[styleId] ?? (styleId === DEFAULT_STYLE_ID ? page.imageUrl : undefined);
+
   const savePage = async (storyId: string, page: TemplatePage) => {
     setSavingPage(page.pageNumber);
     setPageMsg((m) => ({ ...m, [page.pageNumber]: { text: "" } }));
@@ -199,10 +263,15 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ storyText: page.storyText, illustrationPrompt: page.illustrationPrompt }),
       });
-      const res = await fetch(`/api/story-library/${storyId}/pages/${page.pageNumber}/generate-image`, { method: "POST" });
+      const res = await fetch(`/api/story-library/${storyId}/pages/${page.pageNumber}/generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ styleId }),
+      });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.imageUrl) throw new Error(data?.error || "Image generation failed");
-      patchPageLocal(page.pageNumber, { imageUrl: `${data.imageUrl}${data.imageUrl.includes("?") ? "&" : "?"}v=${Date.now()}` });
+      const versioned = `${data.imageUrl}${data.imageUrl.includes("?") ? "&" : "?"}v=${Date.now()}`;
+      patchPageLocal(page.pageNumber, { imageUrls: { ...page.imageUrls, [data.styleId || styleId]: versioned } });
     } catch (err: any) {
       setPageMsg((m) => ({ ...m, [page.pageNumber]: { text: err.message || "Image generation failed", error: true } }));
     } finally {
@@ -212,13 +281,28 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
 
   return (
     <div className="space-y-6">
-      <div className="border-b border-slate-200 pb-4">
-        <h3 className="text-xl font-black text-slate-800 flex items-center gap-1.5">
-          <Library className="h-5 w-5 text-emerald-600" /> Classic Story Library
-        </h3>
-        <p className="text-xs text-slate-500 mt-1">
-          Ready-made storybooks with their own fixed cast and hand-crafted illustration prompts. No personalization needed - pick one and generate the illustrations instantly.
-        </p>
+      <div className="border-b border-slate-200 pb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xl font-black text-slate-800 flex items-center gap-1.5">
+            <Library className="h-5 w-5 text-emerald-600" /> Classic Story Library
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Ready-made storybooks with their own fixed cast and hand-crafted illustration prompts. No personalization needed - pick one and generate the illustrations instantly.
+          </p>
+        </div>
+        <label className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl pl-2.5 pr-1.5 py-1.5 shrink-0">
+          <Palette className="h-3.5 w-3.5 text-emerald-600" />
+          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">Art Style</span>
+          <select
+            value={styleId}
+            onChange={(e) => setStyleId(e.target.value)}
+            className="text-xs font-bold text-slate-700 bg-transparent border-none focus:outline-none cursor-pointer"
+          >
+            {styles.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {loading ? (
@@ -273,16 +357,32 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
                           className="flex items-center gap-1.5 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-full pl-1 pr-2.5 py-1 transition cursor-pointer"
                         >
                           <img
-                            src={`/api/story-library/${story.id}/characters/${encodeURIComponent(c.key)}/image`}
+                            key={`${c.key}-${styleId}-${castImgVersion}`}
+                            src={`/api/story-library/${story.id}/characters/${encodeURIComponent(c.key)}/image?styleId=${encodeURIComponent(styleId)}`}
                             alt={c.displayName}
                             referrerPolicy="no-referrer"
                             className="h-6 w-6 rounded-full object-cover bg-white border border-slate-200"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
+                              if (styleId !== DEFAULT_STYLE_ID) setCastMissingForStory((m) => ({ ...m, [story.id]: true }));
+                            }}
                           />
                           <span className="text-[10px] font-bold text-slate-600">{c.displayName}</span>
                         </button>
                       ))}
                     </div>
+                    {castMissingForStory[story.id] && (
+                      <button
+                        type="button"
+                        onClick={() => generateCastForStory(story)}
+                        disabled={generatingCastForStory === story.id}
+                        className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 hover:text-emerald-900 disabled:text-slate-400 border border-emerald-200 hover:bg-emerald-50 disabled:border-slate-200 rounded-lg px-2.5 py-1.5 transition"
+                      >
+                        {generatingCastForStory === story.id
+                          ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating cast in {styles.find((s) => s.id === styleId)?.label || styleId}...</>
+                          : <><Sparkles className="h-3 w-3" /> Generate cast in {styles.find((s) => s.id === styleId)?.label || styleId}</>}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -339,7 +439,7 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
                                   <span className="text-[10px] text-slate-400 truncate">{page.storyText || "(no text)"}</span>
                                 </span>
                                 <span className="flex items-center gap-1 shrink-0">
-                                  {page.imageUrl && <ImageIcon className="h-3 w-3 text-emerald-600" />}
+                                  {pageImageFor(page) && <ImageIcon className="h-3 w-3 text-emerald-600" />}
                                   {isOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
                                 </span>
                               </button>
@@ -379,7 +479,7 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
                                       className="flex items-center gap-1 text-[10px] font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-md px-2 py-1 transition disabled:bg-slate-300"
                                     >
                                       {imagingPage === page.pageNumber ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                                      {imagingPage === page.pageNumber ? "Rendering..." : page.imageUrl ? "Regenerate Image" : "Generate Image"}
+                                      {imagingPage === page.pageNumber ? "Rendering..." : pageImageFor(page) ? `Regenerate Image (${styles.find((s) => s.id === styleId)?.label || styleId})` : `Generate Image (${styles.find((s) => s.id === styleId)?.label || styleId})`}
                                     </button>
                                   </div>
 
@@ -389,9 +489,9 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
                                     </p>
                                   )}
 
-                                  {page.imageUrl && (
+                                  {pageImageFor(page) && (
                                     <div className="w-full aspect-square max-w-[200px] mx-auto bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
-                                      <img src={page.imageUrl} alt={`Page ${page.pageNumber}`} referrerPolicy="no-referrer" className="w-full h-full object-contain" />
+                                      <img key={styleId} src={pageImageFor(page)} alt={`Page ${page.pageNumber}`} referrerPolicy="no-referrer" className="w-full h-full object-contain" />
                                     </div>
                                   )}
                                 </div>
@@ -448,8 +548,8 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
               {/* Character sheet: the generated multi-view sheet if one exists, else the single reference */}
               <div className="w-full aspect-square bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center border border-slate-200">
                 <img
-                  key={charDetail?.displaySheetImageUrl || "single"}
-                  src={charDetail?.displaySheetImageUrl || `/api/story-library/${selectedChar.storyId}/characters/${encodeURIComponent(selectedChar.key)}/image`}
+                  key={charDetail?.displaySheetImageUrl || `single-${styleId}`}
+                  src={charDetail?.displaySheetImageUrl || `/api/story-library/${selectedChar.storyId}/characters/${encodeURIComponent(selectedChar.key)}/image?styleId=${encodeURIComponent(styleId)}`}
                   alt={`${selectedChar.displayName} character sheet`}
                   referrerPolicy="no-referrer"
                   className="h-full w-full object-contain"

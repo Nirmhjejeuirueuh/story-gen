@@ -77,10 +77,12 @@ router.post("/character-sheet/:id/approve", characterController.approveCharacter
 
 // Fixed-cast Story Library (filesystem-authored story templates under server/stories/).
 // The two image-serving GET routes are registered above the auth gate (public, <img>-loaded).
+router.get("/styles", storyLibraryController.listStyles);
 router.get("/story-library", storyLibraryController.listStories);
 router.get("/story-library/:id", storyLibraryController.getStory);
 router.get("/story-library/:id/characters/:key", storyLibraryController.getCharacterDetail);
 router.post("/story-library/:id/characters/:key/regenerate-sheet", storyLibraryController.regenerateCastSheet);
+router.post("/story-library/:id/styles/:styleId/generate-cast", storyLibraryController.generateCastForStyle);
 
 // REDESIGN: template page generation + per-page editor + image generation. The shared story
 // templates are collaboratively editable by any signed-in user (owner + mentor), not admin-gated.

@@ -14,6 +14,7 @@ import { promptEngine } from "../providers/PromptEngine.js";
 import { db } from "../database/db.js";
 import { IllustrationStyle, TemplatePageDoc } from "../../src/types.js";
 import { DEFAULT_LAYOUT_PLAN_ID } from "../config/layouts.js";
+import { ART_STYLES, DEFAULT_STYLE_ID, getStyle } from "../config/styles.js";
 
 /**
  * Extracts the single balanced { ... } JSON object from a text-model response, ignoring any
@@ -167,11 +168,12 @@ export class StoryLibraryController {
    * template level (reused across users) and records its URL on the page. Extracted from the HTTP
    * handler so book creation can also call it (to render a template page's image on first use).
    */
-  public async generatePageImageForStory(id: string, pageNum: number): Promise<string> {
+  public async generatePageImageForStory(id: string, pageNum: number, styleId: string = DEFAULT_STYLE_ID): Promise<string> {
     const pages = templateStore.getPages(id);
     const page = pages?.find((p) => p.pageNumber === pageNum);
     if (!page) throw new Error("Page not found (generate pages first).");
 
+    const style = getStyle(styleId);
     const story = templateStore.getStory(id) ?? storyLibraryService.getStory(id);
     const nameOf = (key: string) => story?.characters.find((c) => c.key === key)?.displayName || key;
 
@@ -187,12 +189,13 @@ export class StoryLibraryController {
     const dropNearAntagonistKeys = new Set(rawChars.filter((c) => c.dropReferenceNearAntagonist).map((c) => c.key));
     const antagonistOnPage = pageKeys.some((k) => antagonistKeys.has(k));
 
-    // Condition on the referenced cast members' reference sheets so faces/costumes stay consistent.
+    // Condition on the referenced cast members' reference sheets (in the chosen style) so
+    // faces/costumes stay consistent — and match the style the page is being rendered in.
     const references = (await Promise.all(
       pageKeys.map((key) => {
         if (antagonistKeys.has(key) && pageKeys.length > 1) return Promise.resolve(null);
         if (antagonistOnPage && dropNearAntagonistKeys.has(key)) return Promise.resolve(null);
-        return storyLibraryService.getCharacterImageBase64(id, key);
+        return storyLibraryService.getCharacterImageBase64(id, key, style.id);
       })
     )).filter((ref): ref is { mime: string; data: string } => !!ref);
 
@@ -201,7 +204,8 @@ export class StoryLibraryController {
       page.storyText,
       page.illustrationPrompt,
       layout.prompt,
-      (page.characterKeys || []).map(nameOf)
+      (page.characterKeys || []).map(nameOf),
+      style
     );
 
     const imageProvider = db.settings?.imageProvider || "gemini";
@@ -211,25 +215,29 @@ export class StoryLibraryController {
           ? geminiProvider.createProceduralIllustration(imagePrompt, IllustrationStyle.STORYBOOK)
           : await geminiProvider.generateImageWithReferences(imagePrompt, references, IllustrationStyle.STORYBOOK));
 
-    const imageUrl = await storageService.uploadDataUri(dataUri, `pages/${id}/${pageNum}-${Date.now()}`);
-    await templateStore.updatePage(id, pageNum, { imageUrl });
+    const imageUrl = await storageService.uploadDataUri(dataUri, `pages/${id}/${style.id}/${pageNum}-${Date.now()}`);
+    await templateStore.setPageImage(id, pageNum, style.id, imageUrl);
     return imageUrl;
   }
 
-  /** Reuses a template page's image if it already has one; otherwise renders and caches it. */
-  public async ensurePageImage(id: string, pageNum: number): Promise<string> {
+  /** Reuses a template page's image (for the given style) if it already has one; otherwise renders and caches it. */
+  public async ensurePageImage(id: string, pageNum: number, styleId: string = DEFAULT_STYLE_ID): Promise<string> {
     const pages = templateStore.getPages(id);
-    const existing = pages?.find((p) => p.pageNumber === pageNum)?.imageUrl;
+    const page = pages?.find((p) => p.pageNumber === pageNum);
+    const existing = styleId === DEFAULT_STYLE_ID ? page?.imageUrl : page?.imageUrls?.[styleId];
     if (existing) return existing;
-    return this.generatePageImageForStory(id, pageNum);
+    return this.generatePageImageForStory(id, pageNum, styleId);
   }
 
   public generatePageImage = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id, pageNumber } = req.params;
       const pageNum = Number(pageNumber);
-      const imageUrl = await this.generatePageImageForStory(id, pageNum);
-      res.status(200).json({ success: true, pageNumber: pageNum, imageUrl });
+      // Resolve to the canonical id before echoing it back — the client keys its local page-image
+      // map by this value, which must match the style the backend actually stored under.
+      const styleId = getStyle((req.body?.styleId as string) || (req.query.styleId as string)).id;
+      const imageUrl = await this.generatePageImageForStory(id, pageNum, styleId);
+      res.status(200).json({ success: true, pageNumber: pageNum, styleId, imageUrl });
     } catch (error: any) {
       console.error("[StoryLibraryController] Error generating page image:", error);
       res.status(500).json({ error: "Failed to generate page image: " + error.message });
@@ -276,6 +284,7 @@ export class StoryLibraryController {
   public getCharacterDetail = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id, key } = req.params;
+      const styleId = getStyle(req.query.styleId as string).id;
       const story = storyLibraryService.getStory(id);
       if (!story) {
         res.status(404).json({ error: "Story library entry not found." });
@@ -293,15 +302,15 @@ export class StoryLibraryController {
       const doc = await templateStore.getCharacter(id, normalizedKey);
       const prompt = doc?.prompt ?? storyLibraryService.getCharacterDescription(id, normalizedKey);
 
-      const gcsPath = await storyLibraryService.getCharacterGcsPath(id, normalizedKey);
-      const hasImage = !!gcsPath || !!storyLibraryService.getCharacterImagePath(id, normalizedKey);
+      const gcsPath = await storyLibraryService.getCharacterGcsPath(id, normalizedKey, styleId);
+      const hasImage = !!gcsPath || (styleId === DEFAULT_STYLE_ID && !!storyLibraryService.getCharacterImagePath(id, normalizedKey));
 
       res.status(200).json({
         key: character.key,
         displayName: character.displayName,
         prompt,
         hasImage,
-        displaySheetImageUrl: doc?.displaySheetImageUrl || null,
+        displaySheetImageUrl: doc?.displaySheetImageUrls?.[styleId] || null,
         source: doc ? "firestore" : "filesystem",
       });
     } catch (error: any) {
@@ -320,6 +329,7 @@ export class StoryLibraryController {
     try {
       const { id, key } = req.params;
       const normalizedKey = key.trim().toLowerCase();
+      const style = getStyle(req.body?.styleId as string);
 
       const story = storyLibraryService.getStory(id);
       const character = story?.characters.find((c) => c.key === normalizedKey);
@@ -328,12 +338,15 @@ export class StoryLibraryController {
         return;
       }
 
-      // The clean single image becomes the reference; the .md/Firestore prompt describes it.
-      const reference = await storyLibraryService.getCharacterImageBase64(id, normalizedKey);
+      // The clean single image for THIS style becomes the reference; the .md/Firestore prompt
+      // describes it. If this style's clean reference hasn't been generated yet, the caller
+      // should hit "generate cast in this style" first — regenerating a display sheet without a
+      // matching clean reference would drift from what the story's pages actually use.
+      const reference = await storyLibraryService.getCharacterImageBase64(id, normalizedKey, style.id);
       const doc = await templateStore.getCharacter(id, normalizedKey);
       const description = doc?.prompt ?? storyLibraryService.getCharacterDescription(id, normalizedKey) ?? `The character "${character.displayName}".`;
 
-      const prompt = promptEngine.generateCastSheetPrompt(character.displayName, description);
+      const prompt = promptEngine.generateCastSheetPrompt(character.displayName, description, style);
       const refImages = reference ? [reference] : [];
       const imageProvider = db.settings?.imageProvider || "gemini";
 
@@ -344,9 +357,13 @@ export class StoryLibraryController {
             : await geminiProvider.generateImageWithReferences(prompt, refImages, IllustrationStyle.STORYBOOK));
 
       // Store under a "-sheet-" suffix so it is NOT picked up as the generation reference
-      // (which is matched by the prefix "casts/<id>/<key>." — note the trailing dot).
-      const displaySheetImageUrl = await storageService.uploadDataUri(dataUri, `casts/${id}/${normalizedKey}-sheet-${Date.now()}`);
-      await templateStore.setCharacterDisplaySheet(id, normalizedKey, displaySheetImageUrl);
+      // (which is matched by the prefix "casts/<id>/<styleId>/<key>." — note the trailing dot).
+      // Always use the RESOLVED style.id, never the raw request value: getStyle() falls back to
+      // the default for an unknown id, so filing under the raw value would store art rendered in
+      // one style under the name of another (and let a caller write arbitrary object paths /
+      // Firestore map keys).
+      const displaySheetImageUrl = await storageService.uploadDataUri(dataUri, `casts/${id}/${style.id}/${normalizedKey}-sheet-${Date.now()}`);
+      await templateStore.setCharacterDisplaySheet(id, normalizedKey, style.id, displaySheetImageUrl);
 
       res.status(200).json({ success: true, displaySheetImageUrl });
     } catch (error: any) {
@@ -361,21 +378,97 @@ export class StoryLibraryController {
   public getCharacterImage = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id, key } = req.params;
-      // Cloud-first: cast reference images live in GCS (casts/<id>/<key>.*).
-      const gcsPath = await storyLibraryService.getCharacterGcsPath(id, key);
+      const styleId = getStyle(req.query.styleId as string).id;
+      // Cloud-first: cast reference images live in GCS (casts/<id>/<styleId>/<key>.*), with the
+      // default style also falling back to the original flat casts/<id>/<key>.* layout.
+      const gcsPath = await storyLibraryService.getCharacterGcsPath(id, key, styleId);
       if (gcsPath) {
         await storageService.streamTo(gcsPath, res);
         return;
       }
-      const filePath = storyLibraryService.getCharacterImagePath(id, key);
-      if (!filePath) {
-        res.status(404).json({ error: "Character reference image not found." });
-        return;
+      if (styleId === DEFAULT_STYLE_ID) {
+        const filePath = storyLibraryService.getCharacterImagePath(id, key);
+        if (filePath) {
+          res.sendFile(filePath);
+          return;
+        }
       }
-      res.sendFile(filePath);
+      res.status(404).json({ error: "Character reference image not found for this style." });
     } catch (error: any) {
       console.error("[StoryLibraryController] Error streaming character image:", error);
       res.status(500).json({ error: "Failed to load character image: " + error.message });
+    }
+  };
+
+  /** The art style catalogue (id, label) for the Story Library's style switcher. */
+  public listStyles = async (req: Request, res: Response): Promise<void> => {
+    res.status(200).json(ART_STYLES.map((s) => ({ id: s.id, label: s.label })));
+  };
+
+  /**
+   * Generates (or REGENERATES) this story's cast in a given style — conditioned on each
+   * character's DEFAULT-style reference image so identity (face, proportions, costume) carries
+   * across styles and only the rendering style changes — and uploads to
+   * casts/<storyId>/<styleId>/<key>.<ext>, overwriting any existing image for this style. This is
+   * an explicit, user-triggered action (a button click, never fired automatically), so it always
+   * overwrites rather than skipping already-generated characters — matching every other
+   * "Regenerate" action in this app (page images, display sheets). That's what makes tuning a
+   * style's prompt in styles.ts actually take effect on existing art: edit the prompt, restart the
+   * server, click this again. Never touches or regenerates any other style's images.
+   */
+  public generateCastForStyle = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id, styleId } = req.params;
+      const style = getStyle(styleId);
+      const story = storyLibraryService.getStory(id);
+      if (!story) {
+        res.status(404).json({ error: "Story library entry not found." });
+        return;
+      }
+
+      const generated: string[] = [];
+      const skipped: string[] = [];
+      const failed: string[] = [];
+
+      // The default style is never (re)generated here: its images ARE the original cast art,
+      // which already exists on disk/in GCS for every seeded character.
+      if (style.id === DEFAULT_STYLE_ID) {
+        res.status(200).json({ success: true, styleId: style.id, generated: [], skipped: story.characters.map((c) => c.key), failed: [] });
+        return;
+      }
+
+      for (const character of story.characters) {
+        try {
+          const doc = await templateStore.getCharacter(id, character.key);
+          const description = doc?.prompt ?? storyLibraryService.getCharacterDescription(id, character.key) ?? `The character "${character.displayName}".`;
+          const reference = await storyLibraryService.getCharacterImageBase64(id, character.key, DEFAULT_STYLE_ID);
+
+          const prompt = promptEngine.generateStyledCastReferencePrompt(description, style);
+          const refImages = reference ? [reference] : [];
+          const imageProvider = db.settings?.imageProvider || "gemini";
+
+          const dataUri = imageProvider === "openai"
+            ? await openaiProvider.generateImageWithReferences(prompt, refImages)
+            : await geminiProvider.generateImageWithReferences(prompt, refImages, IllustrationStyle.STORYBOOK);
+
+          const match = /^data:image\/([a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUri);
+          if (!match || match[1] === "svg+xml") {
+            failed.push(character.key);
+            continue;
+          }
+          const [, subtype, b64] = match;
+          await storageService.uploadBuffer(`casts/${id}/${style.id}/${character.key}.${subtype === "jpeg" ? "jpg" : subtype}`, Buffer.from(b64, "base64"), `image/${subtype}`);
+          generated.push(character.key);
+        } catch (err: any) {
+          console.error(`[StoryLibraryController] Failed to generate ${character.key} in style ${style.id}:`, err.message);
+          failed.push(character.key);
+        }
+      }
+
+      res.status(200).json({ success: true, styleId: style.id, generated, skipped, failed });
+    } catch (error: any) {
+      console.error("[StoryLibraryController] Error generating cast for style:", error);
+      res.status(500).json({ error: "Failed to generate cast for style: " + error.message });
     }
   };
 

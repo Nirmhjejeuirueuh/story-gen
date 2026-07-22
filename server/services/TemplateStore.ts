@@ -22,6 +22,7 @@ import { storyLibraryService } from "./StoryLibraryService.js";
 import {
   StoryTemplateDoc, TemplatePageDoc, TemplateCharacterDoc, StoryLibraryEntry,
 } from "../../src/types.js";
+import { DEFAULT_STYLE_ID } from "../config/styles.js";
 
 const STYLE_DEFAULT = "Storybook";
 
@@ -281,6 +282,33 @@ export class TemplateStore {
     }
   }
 
+  /**
+   * Records a generated page image for one style. The default style's image also mirrors into
+   * the legacy singular `imageUrl` field, which generic-book creation (BookController) and the
+   * QueueService reuse path still read directly. Every other style lives only in `imageUrls`, so
+   * switching styles never overwrites another style's already-rendered page image.
+   */
+  async setPageImage(storyId: string, pageNumber: number, styleId: string, imageUrl: string): Promise<void> {
+    // Build the FULL merged map ourselves (from the cache) rather than relying on a dotted key
+    // like "imageUrls.<styleId>" — Firestore's set(..., {merge:true}) treats dotted keys in a
+    // plain object literally (a field named "imageUrls.pixar-3d"), NOT as a nested field path;
+    // only update() parses dot notation. Writing the whole nested object avoids that trap.
+    const entry = this.cache.get(storyId);
+    const cached = entry?.pages.find((p) => p.pageNumber === pageNumber);
+    const imageUrls = { ...cached?.imageUrls, [styleId]: imageUrl };
+
+    const patch: Partial<TemplatePageDoc> = { imageUrls };
+    if (styleId === DEFAULT_STYLE_ID) patch.imageUrl = imageUrl;
+
+    const storyRef = this.col().doc(storyId);
+    await storyRef.collection("pages").doc(String(pageNumber)).set(clean(patch), { merge: true });
+
+    if (cached) {
+      cached.imageUrls = imageUrls;
+      if (styleId === DEFAULT_STYLE_ID) cached.imageUrl = imageUrl;
+    }
+  }
+
   /** REDESIGN: merges a partial update into one generated page (edit text/prompt/layout/image). */
   async updatePage(storyId: string, pageNumber: number, patch: Partial<TemplatePageDoc>): Promise<TemplatePageDoc | null> {
     const storyRef = this.col().doc(storyId);
@@ -303,15 +331,21 @@ export class TemplateStore {
   }
 
   /**
-   * Stores a generated multi-view DISPLAY sheet URL on a cast character doc (Slice 4). Leaves
-   * sheetImageUrl (the clean single generation reference) untouched. Updates the cache entry too.
+   * Stores a generated multi-view DISPLAY sheet URL for one style on a cast character doc
+   * (Slice 4 + multi-style catalogue). Leaves sheetImageUrl (the clean single generation
+   * reference) and every other style's sheet untouched. Updates the cache entry too.
    */
-  async setCharacterDisplaySheet(storyId: string, key: string, displaySheetImageUrl: string): Promise<void> {
+  async setCharacterDisplaySheet(storyId: string, key: string, styleId: string, displaySheetImageUrl: string): Promise<void> {
     const normalizedKey = key.trim().toLowerCase();
-    await this.col().doc(storyId).collection("characters").doc(normalizedKey).set({ displaySheetImageUrl }, { merge: true });
+    // Same trap as setPageImage above: build the full merged map ourselves rather than a dotted
+    // key, since set(..., {merge:true}) does not treat dots in a plain object key as a nested path.
     const entry = this.cache.get(storyId);
     const cached = entry?.characters.find((c) => c.key === normalizedKey);
-    if (cached) cached.displaySheetImageUrl = displaySheetImageUrl;
+    const displaySheetImageUrls = { ...cached?.displaySheetImageUrls, [styleId]: displaySheetImageUrl };
+
+    await this.col().doc(storyId).collection("characters").doc(normalizedKey)
+      .set({ displaySheetImageUrls }, { merge: true });
+    if (cached) cached.displaySheetImageUrls = displaySheetImageUrls;
   }
 }
 

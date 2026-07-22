@@ -5,6 +5,70 @@ All notable changes to StoryGen are recorded here. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed — non-default art styles were dominated by the reference image's own rendering
+- Reported as "Ghibli looks the same as Vintage Watercolor" — confirmed live: reference-conditioned
+  generation was copying the reference photo's own texture/linework/palette over the requested
+  style, worst on Ghibli (also a painted look, so it got swallowed almost entirely) but present to
+  a lesser degree on every non-default style. `ArtStyle` gained an `avoidFragment` naming the exact
+  medium each style must NOT come out looking like, and `PromptEngine` now appends an explicit
+  "reference is for IDENTITY ONLY — discard its rendering technique" directive to every prompt that
+  combines a reference image with a non-default style (cast reference generation, display sheets,
+  page images). Consolidated the cast-reference prompt (previously inlined in
+  `StoryLibraryController`) into `PromptEngine.generateStyledCastReferencePrompt`.
+- Purged every non-default-style image generated before this fix (69 GCS objects, 24 Firestore
+  `imageUrls`/`displaySheetImageUrls` entries, across every story that had any) so the next
+  "Generate cast in this style" click regenerates fresh under the corrected prompt instead of
+  serving the old weakly-styled art forever. Vintage Watercolor and all story text/layout/
+  illustration-prompt data were untouched.
+
+### Fixed — path traversal on the public cast-image route
+- `GET /api/story-library/:id/characters/:key/image` sits outside the auth gate and joined the
+  URL's `:id` straight into a filesystem path. Express decodes percent-encoding AFTER routing, so
+  a request for `%2E%2E%2F%2E%2E%2F%2E%2E%2Fserver` escaped `server/stories/` — verified live,
+  returning a 500 whose body leaked the absolute host path. `StoryLibraryService` now resolves
+  every story id through a `storyDir()` helper that rejects anything landing outside the stories
+  root (containment check on the RESOLVED path, so `..`, absolute paths and Windows drive-relative
+  ids are all covered), and `findSubdir` treats a missing directory as "no such story" instead of
+  throwing an ENOENT that surfaced as a path-leaking 500. Re-verified after the fix: traversal
+  attempts 404, legitimate stories/styles still 200.
+
+### Fixed — unvalidated styleId was used for storage paths and Firestore keys
+- `regenerateCastSheet` resolved the requested style through `getStyle()` (which falls back to the
+  default for an unknown id) but then used the RAW request value to build the GCS object path and
+  the Firestore map key. A typo'd style silently filed default-style art under a nonexistent style
+  name, and a caller could steer writes to arbitrary object paths / map keys. All write paths now
+  use the resolved `style.id`; the read paths (`getCharacterDetail`, `getCharacterImage`) and the
+  `generate-image` response now normalize through `getStyle()` too, so the id the client keys its
+  cache by always matches what the backend stored under. Verified a known-but-ungenerated style
+  still 404s (the UI's "generate cast for this style" affordance depends on it).
+
+### Fixed — per-style image URLs were written to a literal dotted field name
+- `setPageImage`/`setCharacterDisplaySheet` wrote `{ "imageUrls.<styleId>": url }` through
+  `set(..., { merge: true })`. Firestore only parses dot notation as a field path in `update()` —
+  in `set()` a dotted key is a literal field NAME, so the data landed in a field called
+  `"imageUrls.pixar-3d"` instead of inside the `imageUrls` map. Generation appeared to work (the
+  in-memory cache was updated correctly) but every server restart reloaded from Firestore and the
+  images vanished from the UI. Both writers now build the full merged map and write it as a real
+  nested object; a one-off repair moved the already-orphaned fields back into place (24 pages on
+  Alice) and was then removed.
+
+### Added — multiple art styles for the Story Library
+- Replaced the single hardcoded `HOUSE_STYLE` constant with a style catalogue
+  (`server/config/styles.ts`): Vintage Watercolor (the original art), Pixar-Inspired 3D,
+  Claymation, and Studio Ghibli-Inspired Fantasy. `PromptEngine` now takes the style as a
+  parameter rather than importing a constant, so character sheets, cast references and page
+  images all render in the selected style.
+- Storage is namespaced per style (`casts/<storyId>/<styleId>/<key>.*`,
+  `pages/<storyId>/<styleId>/<n>.*`), with the default style also resolving the original flat
+  `casts/<storyId>/<key>.*` layout — so no pre-existing artwork had to be moved or regenerated.
+- New styles are generated lazily per story (`POST /story-library/:id/styles/:styleId/generate-cast`),
+  conditioned on that character's default-style reference so identity carries across styles and
+  only the rendering changes. A story's text, layout and illustration prompt are style-independent
+  and are never regenerated when switching styles.
+- Story Library gains an art-style dropdown (persisted to localStorage, guarded so a storage
+  failure can't take the page down); each style's rendered page images are stored separately, so
+  switching styles never overwrites another style's art.
+
 ### Fixed — text scrim was rendering as a hard-edged box on one layout
 - Layout 4 (Full Width Header Text) came out with a visibly rectangular translucent band behind
   the text — inconsistent with the soft, cloud-like fade the other layouts produced. Root cause:

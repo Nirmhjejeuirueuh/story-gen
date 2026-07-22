@@ -7,12 +7,27 @@ import fs from "fs";
 import path from "path";
 import { StoryLibraryEntry, StoryLibraryChapter, StoryLibraryCharacter } from "../../src/types.js";
 import { storageService } from "./StorageService.js";
+import { DEFAULT_STYLE_ID } from "../config/styles.js";
 
 const CHAPTERS_DIR_NAMES = ["chapters"];
 const CHARACTERS_DIR_NAMES = ["charators", "characters"];
 
 export class StoryLibraryService {
   private storiesRoot = path.join(process.cwd(), "server", "stories");
+
+  /**
+   * Resolves a story id to its folder, or null if the id would escape `storiesRoot`.
+   * Story ids arrive straight from URL params and are joined into filesystem paths, so a
+   * percent-encoded id (Express decodes `%2F`/`%2E` AFTER routing, so `:id` really can contain
+   * separators and `..`) could otherwise reach directories outside the story library. Comparing
+   * the RESOLVED path against the root catches every such form — `..`, absolute paths, and
+   * Windows drive-relative ids alike — rather than trying to blacklist them.
+   */
+  private storyDir(id: string): string | null {
+    const root = path.resolve(this.storiesRoot);
+    const dir = path.resolve(root, id || "");
+    return dir === root || dir.startsWith(root + path.sep) ? dir : null;
+  }
 
   /**
    * Lists all filesystem-authored story templates (chapters + illustration prompts + character sheets)
@@ -31,8 +46,8 @@ export class StoryLibraryService {
    * Loads a single story library entry, parsing its chapters and character roster
    */
   public getStory(id: string): StoryLibraryEntry | null {
-    const storyDir = path.join(this.storiesRoot, id);
-    if (!fs.existsSync(storyDir) || !fs.statSync(storyDir).isDirectory()) return null;
+    const storyDir = this.storyDir(id);
+    if (!storyDir || !fs.existsSync(storyDir) || !fs.statSync(storyDir).isDirectory()) return null;
 
     const chaptersDir = this.findSubdir(storyDir, CHAPTERS_DIR_NAMES);
     const charsDir = this.findSubdir(storyDir, CHARACTERS_DIR_NAMES);
@@ -88,11 +103,11 @@ export class StoryLibraryService {
 
   /**
    * Reads a character reference image as base64 for use as a generation reference.
-   * Cloud-first: fetches casts/<storyId>/<key>.* from GCS, falling back to any legacy
+   * Cloud-first: fetches casts/<storyId>/<styleId>/<key>.* from GCS, falling back to any legacy
    * on-disk image (e.g. Alice's original cast).
    */
-  public async getCharacterImageBase64(storyId: string, key: string): Promise<{ mime: string; data: string } | null> {
-    const gcsPath = await this.getCharacterGcsPath(storyId, key);
+  public async getCharacterImageBase64(storyId: string, key: string, styleId?: string): Promise<{ mime: string; data: string } | null> {
+    const gcsPath = await this.getCharacterGcsPath(storyId, key, styleId);
     if (gcsPath) {
       const ref = await storageService.getObjectAsReference(gcsPath);
       if (ref) return ref;
@@ -105,10 +120,20 @@ export class StoryLibraryService {
   }
 
   /**
-   * Returns the GCS object path of a cast reference image (casts/<storyId>/<key>.*), or null.
+   * Returns the GCS object path of a cast reference image for the given style
+   * (casts/<storyId>/<styleId>/<key>.*), or null if that style hasn't been generated for this
+   * character yet. For the DEFAULT style only, also falls back to the original flat layout
+   * (casts/<storyId>/<key>.*) — every image generated before this style catalogue existed lives
+   * there, and it never needs to move for the default style to keep resolving it.
    */
-  public async getCharacterGcsPath(storyId: string, key: string): Promise<string | null> {
-    return storageService.findObjectByPrefix(`casts/${storyId}/${key.trim().toLowerCase()}.`);
+  public async getCharacterGcsPath(storyId: string, key: string, styleId: string = DEFAULT_STYLE_ID): Promise<string | null> {
+    const normalizedKey = key.trim().toLowerCase();
+    const styled = await storageService.findObjectByPrefix(`casts/${storyId}/${styleId}/${normalizedKey}.`);
+    if (styled) return styled;
+    if (styleId === DEFAULT_STYLE_ID) {
+      return storageService.findObjectByPrefix(`casts/${storyId}/${normalizedKey}.`);
+    }
+    return null;
   }
 
   /**
@@ -124,7 +149,8 @@ export class StoryLibraryService {
    * character is defined only by an image (e.g. Alice) with no accompanying .md.
    */
   public getCharacterDescription(storyId: string, key: string): string | null {
-    const storyDir = path.join(this.storiesRoot, storyId);
+    const storyDir = this.storyDir(storyId);
+    if (!storyDir) return null;
     const charsDir = this.findSubdir(storyDir, CHARACTERS_DIR_NAMES);
     if (!charsDir) return null;
 
@@ -145,7 +171,9 @@ export class StoryLibraryService {
   }
 
   private findIllustrationFile(storyId: string, pageNumber: number): string | null {
-    const illustrationsDir = path.join(this.storiesRoot, storyId, "illustrations");
+    const storyDir = this.storyDir(storyId);
+    if (!storyDir) return null;
+    const illustrationsDir = path.join(storyDir, "illustrations");
     if (!fs.existsSync(illustrationsDir)) return null;
 
     const files = fs.readdirSync(illustrationsDir).filter((f) => /\.(png|jpe?g|svg)$/i.test(f));
@@ -154,7 +182,8 @@ export class StoryLibraryService {
   }
 
   private findCharacterFile(storyId: string, key: string): string | null {
-    const storyDir = path.join(this.storiesRoot, storyId);
+    const storyDir = this.storyDir(storyId);
+    if (!storyDir) return null;
     const charsDir = this.findSubdir(storyDir, CHARACTERS_DIR_NAMES);
     if (!charsDir) return null;
 
@@ -165,6 +194,9 @@ export class StoryLibraryService {
   }
 
   private findSubdir(parent: string, candidates: string[]): string | null {
+    // Missing/unreadable parent is a normal "no such story", not an error worth throwing —
+    // an uncaught ENOENT here surfaced to callers as a 500 that echoed the absolute path.
+    if (!fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) return null;
     const entries = fs.readdirSync(parent, { withFileTypes: true }).filter((d) => d.isDirectory());
     for (const candidate of candidates) {
       const match = entries.find((e) => e.name.toLowerCase() === candidate);

@@ -20,8 +20,14 @@ dotenv.config();
 
 import { geminiProvider } from "../providers/GeminiProvider.js";
 import { storageService } from "../services/StorageService.js";
-import { HOUSE_STYLE } from "../config/config.js";
+import { getStyle } from "../config/styles.js";
 import { IllustrationStyle } from "../../src/types.js";
+
+// This script only ever generates the default (vintage-watercolor) style, written to the
+// legacy flat path casts/<storyId>/<key>.* — the same path StoryLibraryService treats as that
+// style's home. Other styles are generated on demand per story via the "generate cast in this
+// style" action in the Story Library UI, which writes to casts/<storyId>/<styleId>/<key>.*.
+const HOUSE_STYLE = getStyle().promptFragment;
 import fs from "fs";
 import path from "path";
 

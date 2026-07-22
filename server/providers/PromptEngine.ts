@@ -3,17 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { HOUSE_STYLE } from "../config/config.js";
+import { ArtStyle, DEFAULT_STYLE_ID, getStyle } from "../config/styles.js";
 
 export class PromptEngine {
   /**
-   * Generates a prompt for creating an official children's storybook character sheet.
-   * Rendered in the shared HOUSE_STYLE so the hero's reference matches the story pages
-   * (a sheet drawn in a different style is a major cause of the hero "drifting" between
-   * the approved sheet and the rendered illustrations).
+   * Directive appended wherever a reference IMAGE is combined with a non-default style. Without
+   * this, the model tends to copy the reference's own rendering technique (its watercolor wash,
+   * ink linework, brush texture) over the requested style, especially when the requested style is
+   * also a painted/2D look — Ghibli got swallowed by a watercolor reference almost entirely before
+   * this existed. Naming the exact medium to avoid (via style.avoidFragment) gives the model
+   * something concrete to reject instead of a vague "look different" instruction.
    */
-  public generateCharacterPrompt(name: string, age: number, gender: string, description: string): string {
-    return `Create a comprehensive character design reference sheet for a ${age}-year-old ${gender} named "${name}", rendered in this exact art style: ${HOUSE_STYLE}. Use a single clean neutral background.
+  private styleOverrideDirective(style: ArtStyle): string {
+    if (style.id === DEFAULT_STYLE_ID) return "";
+    return ` The reference image(s) are for IDENTITY ONLY — face shape, hairstyle, proportions, and costume silhouette. Completely IGNORE and DISCARD the reference's own rendering technique, color palette, brush texture, and shading style; do not let any of it carry over. Render the ENTIRE image from scratch as if a different artist working in a different medium drew it. It must NOT come out looking like ${style.avoidFragment}.`;
+  }
+
+  /**
+   * Generates a prompt for creating an official children's storybook character sheet.
+   * Rendered in the given style so the hero's reference matches the story pages (a sheet
+   * drawn in a different style is a major cause of the hero "drifting" between the approved
+   * sheet and the rendered illustrations).
+   */
+  public generateCharacterPrompt(name: string, age: number, gender: string, description: string, style: ArtStyle = getStyle()): string {
+    return `Create a comprehensive character design reference sheet for a ${age}-year-old ${gender} named "${name}", rendered in this exact art style: ${style.promptFragment}. Use a single clean neutral background.
 Character description and personality: ${description}
 
 The sheet must be a single image laid out in clearly labeled sections, all showing the exact same character with perfectly consistent face, hairstyle, hair color, eye color, skin tone, and clothing/costume colors throughout every section:
@@ -25,7 +38,17 @@ The sheet must be a single image laid out in clearly labeled sections, all showi
 5. POSE SHEET: A sequence of at least 4 labeled dynamic action poses relevant to the character's personality and story role, shown as clean line-art or lightly colored sketches with numbered steps.
 6. COSTUME DESIGN & DETAILS: Close-up callouts of the character's outfit pieces and accessories with small detail insets (zippers, patterns, badges, or props) and labels for each garment/accessory.
 
-Style constraints: Render every section in the house art style above (${HOUSE_STYLE}) with clear labeled sections and a well-organized grid layout. Keep the character simple, charming, and easy to reproduce consistently across a children's storybook.`;
+Style constraints: Render every section in the art style above (${style.promptFragment}) with clear labeled sections and a well-organized grid layout. Keep the character simple, charming, and easy to reproduce consistently across a children's storybook.${this.styleOverrideDirective(style)}`;
+  }
+
+  /**
+   * Generates a story-library cast member's CLEAN reference image in a new style, conditioned on
+   * their existing default-style reference so identity carries over. This is the "seed" step for
+   * every non-default style — get this prompt right and every downstream generation (page images,
+   * display sheets) that conditions on THIS image inherits the correct style automatically.
+   */
+  public generateStyledCastReferencePrompt(description: string, style: ArtStyle): string {
+    return `Full-body character reference of ${description}. A single character standing in a clear neutral pose, facing forward, centered on a plain soft pastel background, friendly and appealing children's book character, rendered in this exact art style: ${style.promptFragment}. Keep the same face, proportions, and costume as the provided reference image — only the rendering style should change.${this.styleOverrideDirective(style)}`;
   }
 
   /**
@@ -33,8 +56,8 @@ Style constraints: Render every section in the house art style above (${HOUSE_ST
    * from its existing single-image description. Used on-demand for a richer DISPLAY sheet; the
    * clean single reference image stays the actual generation reference for story pages.
    */
-  public generateCastSheetPrompt(name: string, description: string): string {
-    return `Create a comprehensive character design reference sheet for the character "${name}", rendered in this exact art style: ${HOUSE_STYLE}. Use a single clean neutral white background, and keep the character perfectly consistent with the provided reference image.
+  public generateCastSheetPrompt(name: string, description: string, style: ArtStyle = getStyle()): string {
+    return `Create a comprehensive character design reference sheet for the character "${name}", rendered in this exact art style: ${style.promptFragment}. Use a single clean neutral white background, and keep the character perfectly consistent with the provided reference image.
 Character description: ${description}
 
 Lay out a single image in clearly labeled sections, all showing the exact same character with perfectly consistent face, colours, and costume throughout:
@@ -44,7 +67,7 @@ Lay out a single image in clearly labeled sections, all showing the exact same c
 4. POSE SHEET: At least 4 labeled dynamic action poses relevant to the character.
 5. DETAILS: Close-up callouts of the character's key features, outfit, or props with labels.
 
-Style constraints: render every section in the house art style above (${HOUSE_STYLE}), organized as a clean labeled grid.`;
+Style constraints: render every section in the art style above (${style.promptFragment}), organized as a clean labeled grid.${this.styleOverrideDirective(style)}`;
   }
 
   /**
@@ -110,24 +133,29 @@ Return ONLY valid, parsable JSON in this exact shape, with no markdown fences or
    * layouts was chosen. The illustration now fills the whole page edge to edge (no reserved
    * parchment/text zone) — the story text is layered directly on top of the artwork using a
    * soft scrim for legibility, like a real picture-book spread rather than a text box on a page.
+   * The structural rules (full-bleed, no borders, the soft text glow) apply to every style; only
+   * the closing "overall finish" sentence names the specific art style being rendered.
    */
-  private readonly PROFESSIONAL_FINISH = `The illustration must fill the ENTIRE page edge to edge — full-bleed art covering every pixel, with absolutely no plain background, parchment strip, or empty margin showing anywhere, including directly behind the text. Do NOT add any border, frame, rule line, or corner ornamentation anywhere on the page. Where the story text sits (per the layout instructions above), lay it directly over the artwork using only a soft, irregular cloud-like glow behind the letters that fades unevenly in every direction, like a gentle wash of mist or soft light — just enough to keep the words clearly legible against the scene beneath. This glow must NEVER read as a rectangle, band, panel, or box of any shape, and must have NO visible straight edge, hard boundary, or outline anywhere — if you can trace a line around where it "stops", it is wrong; it should be impossible to say exactly where the glow ends and the illustration resumes. Never use a solid-coloured or parchment-toned panel behind the text; the illustration must stay visible through the glow. Beneath the text, add one small understated decorative flourish or divider (a thin hairline rule, a tiny ornamental swirl, or a cluster of dots) — the only ornamental element allowed on the page. Render the story text in refined, elegant serif or fine calligraphic-style lettering, warm dark sepia or ink-brown, never harsh pure black. Overall finish: one continuous, full-bleed painterly illustration in a warm, vintage storybook watercolor style, with the text gently layered directly on top — never a picture that leaves empty space, a plain background, or any hard-edged shape showing anywhere on the page.`;
+  private buildFinish(style: ArtStyle): string {
+    return `The illustration must fill the ENTIRE page edge to edge — full-bleed art covering every pixel, with absolutely no plain background, parchment strip, or empty margin showing anywhere, including directly behind the text. Do NOT add any border, frame, rule line, or corner ornamentation anywhere on the page. Where the story text sits (per the layout instructions above), lay it directly over the artwork using only a soft, irregular cloud-like glow behind the letters that fades unevenly in every direction, like a gentle wash of mist or soft light — just enough to keep the words clearly legible against the scene beneath. This glow must NEVER read as a rectangle, band, panel, or box of any shape, and must have NO visible straight edge, hard boundary, or outline anywhere — if you can trace a line around where it "stops", it is wrong; it should be impossible to say exactly where the glow ends and the illustration resumes. Never use a solid-coloured or parchment-toned panel behind the text; the illustration must stay visible through the glow. Beneath the text, add one small understated decorative flourish or divider (a thin hairline rule, a tiny ornamental swirl, or a cluster of dots) — the only ornamental element allowed on the page. Render the story text in refined, elegant lettering using a text colour that reads clearly and harmonizes with the illustration's palette (avoid harsh pure black). Overall finish: one continuous, full-bleed illustration rendered in this exact style: ${style.promptFragment}, with the text gently layered directly on top — never a picture that leaves empty space, a plain background, or any hard-edged shape showing anywhere on the page.`;
+  }
 
   public buildTextPageImagePrompt(
     storyText: string,
     illustrationPrompt: string,
     layoutPrompt: string,
-    castNames: string[]
+    castNames: string[],
+    style: ArtStyle = getStyle()
   ): string {
     const cast = castNames.length ? castNames.join(", ") : "";
     const hasText = storyText.trim().length > 0;
-    return `Create ONE finished children's storybook PAGE as a single image, rendered in this exact art style: ${HOUSE_STYLE}.
+    return `Create ONE finished children's storybook PAGE as a single image, rendered in this exact art style: ${style.promptFragment}.
 
 PAGE LAYOUT — follow this composition precisely for WHERE the ${hasText ? "text and the scene sit" : "scene fills the page"}:
 ${layoutPrompt}
 
 FINISH — how the whole page must look and feel (this is what separates a professional storybook page from a rough draft):
-${this.PROFESSIONAL_FINISH}
+${this.buildFinish(style)}
 
 ${hasText ? `RENDER THIS EXACT STORY TEXT on the page, inside the layout's reserved text area, generously sized and fully legible. Spell every word EXACTLY as written, with no extra or missing words:
 """
@@ -136,7 +164,7 @@ ${storyText}
 
 SCENE to illustrate in the illustration area:
 ${illustrationPrompt}
-${cast ? `\nKeep these characters perfectly consistent with the provided reference images — same faces, colours, and costumes: ${cast}.` : ""}
+${cast ? `\nKeep these characters' IDENTITY perfectly consistent with the provided reference images — same faces, proportions, and costumes: ${cast}. The whole page, including these characters, must still be rendered in the art style specified above — do not let the reference images' own rendering technique override it.` : ""}
 
 Premium printed picture-book quality.${hasText ? " The rendered text MUST be spelled correctly, cleanly kerned, and easy for a child to read." : ""} Do not add any other text, captions, page numbers, or watermarks${hasText ? " beyond the story text above" : ""}.`;
   }

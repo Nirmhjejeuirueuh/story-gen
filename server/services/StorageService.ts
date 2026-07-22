@@ -133,6 +133,19 @@ class StorageService {
     });
   }
 
+  /** Returns every object path starting with `prefix` (e.g. "casts/story/pixar-3d/"). */
+  async listObjectsByPrefix(prefix: string): Promise<string[]> {
+    if (!this.storage) return [];
+    const [files] = await this.storage.bucket(this.bucketName).getFiles({ prefix });
+    return files.map((f) => f.name);
+  }
+
+  /** Deletes one object; silently no-ops if it's already gone. */
+  async deleteObject(objectPath: string): Promise<void> {
+    if (!this.storage) return;
+    await this.storage.bucket(this.bucketName).file(objectPath).delete({ ignoreNotFound: true });
+  }
+
   /** Returns the first object whose name starts with `prefix` (e.g. "casts/story/key."), or null. */
   async findObjectByPrefix(prefix: string): Promise<string | null> {
     if (!this.storage) return null;
