@@ -116,7 +116,8 @@ export interface TemplatePageDoc {
   illustrationPrompt: string;
   characterKeys: string[];
   layoutId?: number;        // the PageLayout chosen for this page (see server/config/layouts.ts)
-  imageUrl?: string;        // the generated page image (text baked in); pre-generated per template
+  imageUrl?: string;        // the DEFAULT style's generated page image (text baked in) — kept for back-compat with generic-book reuse (BookController)
+  imageUrls?: Record<string, string>; // generated page image per style id; the default style's entry mirrors `imageUrl`
 }
 
 // Firestore-backed LayoutPlan (mirrors the storyTemplates pattern above):
@@ -142,7 +143,7 @@ export interface TemplateCharacterDoc {
   role?: string;             // optional placeholder role (e.g. MAIN_CHARACTER) for personalization
   prompt: string | null;     // character-sheet prompt (from charators/<key>.md); null if image-only
   sheetImageUrl: string;     // clean single reference image — used as the GENERATION reference
-  displaySheetImageUrl?: string; // optional generated multi-view pose sheet — DISPLAY only
+  displaySheetImageUrls?: Record<string, string>; // optional generated multi-view pose sheets — DISPLAY only, keyed by style id
   approved: boolean;
   createdAt: string;
   // When true, this character's reference photo is never sent as an image-conditioning input
