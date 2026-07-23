@@ -52,8 +52,21 @@ export class GeminiProvider {
       return response.text.trim();
     } catch (error: any) {
       console.error("Gemini text generation failed:", error);
-      throw error;
+      throw new Error(this.friendlyGeminiError(error));
     }
+  }
+
+  /**
+   * Turns a raw Gemini SDK error into a human-readable message. The SDK stringifies API errors as
+   * a JSON blob (e.g. `{"error":{"code":429,...RESOURCE_EXHAUSTED...}}`) — surfaced verbatim in the
+   * UI that's meaningless, so the most common cause (quota/billing) gets a plain-language message.
+   */
+  private friendlyGeminiError(error: any): string {
+    const raw = String(error?.message || error || "");
+    if (/RESOURCE_EXHAUSTED|\b429\b|quota|prepay|credits are depleted/i.test(raw)) {
+      return "Gemini API quota/credits exhausted — top up billing at ai.studio/projects, then try again.";
+    }
+    return raw || "Gemini request failed.";
   }
 
   /**

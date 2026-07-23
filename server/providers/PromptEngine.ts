@@ -145,7 +145,15 @@ Return ONLY valid, parsable JSON in this exact shape, with no markdown fences or
     illustrationPrompt: string,
     layoutPrompt: string,
     castNames: string[],
-    style: ArtStyle = getStyle()
+    style: ArtStyle = getStyle(),
+    /**
+     * When a personalized book's hero contributed reference images, they're placed FIRST in the
+     * image-reference list — `refCount` tells the model exactly how many of the leading reference
+     * images are the hero, so it can't confuse them with a secondary cast member's reference and
+     * under-render the hero's actual likeness (the cause of a personalized book's hero coming out
+     * generic on any page that also features another character).
+     */
+    hero?: { name: string; refCount: number }
   ): string {
     const cast = castNames.length ? castNames.join(", ") : "";
     const hasText = storyText.trim().length > 0;
@@ -164,6 +172,7 @@ ${storyText}
 
 SCENE to illustrate in the illustration area:
 ${illustrationPrompt}
+${hero ? `\nThe FIRST ${hero.refCount} reference image(s) provided are the story's HERO, ${hero.name} — the single most important character on this page. Preserve ${hero.name}'s exact face, proportions, and identity from those reference images above everything else; every other reference image is a SECONDARY supporting character only and must NOT influence ${hero.name}'s appearance in any way.` : ""}
 ${cast ? `\nKeep these characters' IDENTITY perfectly consistent with the provided reference images — same faces, proportions, and costumes: ${cast}. The whole page, including these characters, must still be rendered in the art style specified above — do not let the reference images' own rendering technique override it.` : ""}
 
 Premium printed picture-book quality.${hasText ? " The rendered text MUST be spelled correctly, cleanly kerned, and easy for a child to read." : ""} Do not add any other text, captions, page numbers, or watermarks${hasText ? " beyond the story text above" : ""}.`;

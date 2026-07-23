@@ -30,7 +30,7 @@ const queueService = new QueueService(jobRepo, characterRepo, bookRepo);
 // 3. Instantiate Controllers with DI
 const uploadController = new UploadController();
 const characterController = new CharacterController(characterRepo, queueService);
-const bookController = new BookController(bookRepo, jobRepo, queueService);
+const bookController = new BookController(bookRepo, jobRepo, queueService, characterRepo);
 
 // --- REST ENDPOINTS MAP ---
 

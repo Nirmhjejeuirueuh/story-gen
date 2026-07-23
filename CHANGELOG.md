@@ -5,6 +5,89 @@ All notable changes to StoryGen are recorded here. Format loosely follows
 
 ## [Unreleased]
 
+### Added — new story: Jack and the Beanstalk (boy hero, 14 pages)
+- New `server/stories/t3-jack-and-the-beanstalk/` (t3 was the one free slot in the numbering):
+  14 chapters, `tags.txt`, and a 7-member cast (jack, mother, the giant, milky white, old man,
+  golden hen, magic harp). Chosen for a ~5-year-old boy to star in — public domain, a young boy
+  protagonist, and a simple 14-beat arc. The giant is written and described as comically large
+  and grumpy rather than menacing, both for age-appropriateness and to reduce the risk of the
+  Gemini image-safety blocks seen with child + threatening-character scenes.
+- Registered `jack` as the story's protagonist in `server/config/protagonists.ts` so a child
+  starring in it gets the name/reference substitution, and added the cast to
+  `server/scripts/generate-casts.ts`.
+
+### Added — sync mechanism for brand-new stories (`TemplateStore.syncMissingStories`)
+- Adding a story folder to disk previously had no way to reach Firestore: `seedFromFilesystem`
+  only runs when the whole `storyTemplates` collection is empty, and `syncMissingCharacters` only
+  tops up an EXISTING story's cast — so a new story simply never appeared in the Story Library
+  (which reads the Firestore-backed cache). `syncMissingStories()` creates the template doc +
+  characters subcollection for any filesystem story missing from Firestore, mirroring the
+  existing sync pattern. `sync-story-characters.ts` now runs it before the per-story cast pass,
+  so one command covers both new stories and new cast members.
+
+### Changed — surface the real reason when page generation fails
+- "Generate Pages" / "Regenerate all pages" showed a hardcoded "Page generation failed. Check the
+  text provider…" regardless of the actual cause, hiding the common one (Gemini quota/credits
+  exhausted — page generation is a text call on the same API key). The frontend now shows the
+  backend's real error, and `GeminiProvider.generateText` translates a raw `RESOURCE_EXHAUSTED`/429
+  blob into a plain "quota/credits exhausted — top up billing at ai.studio/projects" message.
+
+### Fixed — a personalized book's STORED text still named the original protagonist
+- Follow-up to the protagonist fix below: the name substitution was only applied to the image
+  prompt at render time, so the text stored on the book still read "…named Thumbelina" — meaning
+  Book Preview, the page editor and the exported PDF all still showed the original protagonist's
+  name even when the illustrations featured the child. Confirmed on a real personalized book
+  (characterId + childName "Emma" set correctly, stored page 1 text still "…named Thumbelina").
+- Personalization now happens at BOOK CREATION time in `BookController.createBookFromLibrary`, so
+  the stored book text and illustration prompts feature the child everywhere. Extracted the
+  substitution into a shared `personalizeStoryText`/`getProtagonistName` helper used by both
+  creation and the render path (where it is now a no-op for new books, and repairs books created
+  before this change). Dry-run verified across all 14 Thumbelina pages: 0 remaining mentions.
+
+### Fixed — personalized books kept the original protagonist instead of the child (root cause)
+- Reported repeatedly as "it still generates the default character and the name still says
+  Thumbelina". Root cause (confirmed against stored data): the REDESIGN "Generate Pages" pipeline
+  has the text model author each page with the protagonist's REAL name and appearance baked in
+  ("…so she was called Thumbelina"; "tiny Thumbelina, a sweet girl with blonde hair") and lists
+  the protagonist in `characterKeys` — there is no MAIN_CHARACTER token to substitute, so the
+  existing `.replace(/MAIN_CHARACTER/…)` did nothing, and the personalized render was even sent
+  the ORIGINAL protagonist's reference image as a competing input. The child never appeared.
+- Added `server/config/protagonists.ts` mapping each single-protagonist story to its cast key.
+  `QueueService.executeImageJob`'s personalized branch now (a) drops the protagonist's own
+  reference image so the child's photo/sheet is the only hero reference, and (b) swaps the
+  protagonist's name for the child's throughout the story text and scene prompt. Verified against
+  real Thumbelina data: name → child's name, protagonist reference dropped.
+- Known residual: template illustration prompts still contain the protagonist's baked-in
+  appearance adjectives (e.g. "blonde hair"); with the original reference dropped and the child's
+  photo as the sole hero reference the child should dominate, but fully removing the baked-in
+  description requires regenerating the templates with a protagonist-role-only prompt (a separate,
+  credit-costing step). Ensemble/no-child stories (Aesop's Fables, Swiss Family Robinson, Wind in
+  the Willows, The Happy Prince) are intentionally not mapped and use their authored cast as-is.
+
+### Added — personalized books now respect the selected art style; hero prioritized over cast refs
+- Personalized ("Create This Storybook") books previously always rendered the hero's sheet and
+  every page in the default style, regardless of any style picked in the Story Library — there
+  was no `styleId` anywhere in the book-creation path. Added a `styleId` field to `Book`, an art-
+  style dropdown to both book-creation flows (direct library + wizard step 3), and threaded the
+  resolved style into `QueueService.executeImageJob`'s personalized branch (page prompt + which
+  style's cast reference images to use) and into hero-sheet rendering.
+- When a book uses a non-default style, the hero's reference sheet is re-rendered in that style
+  once at book-creation time (`QueueService.generateHeroReferenceSheet`, extracted from the
+  existing character-creation job) and stored on the BOOK (`heroStyledSheetUrl`) rather than
+  overwriting the Character's own shared default-style sheet — so the same character can star in
+  different books rendered in different styles without clobbering each other.
+- Fixed a related bug in the same code path: a generic (non-personalized) book only ever checked
+  the template page's legacy singular `imageUrl` (the default style's cache) when deciding whether
+  to reuse a cached image, so requesting a non-default style always re-rendered from scratch
+  instead of reusing that style's already-cached page. Now checks `imageUrls[styleId]` for
+  non-default styles.
+- Diagnosed a separate reported issue ("the hero comes out generic on some pages of a personalized
+  book") as a real but different problem: pages that also reference another story character send
+  BOTH the hero's and that character's reference photos to Gemini in the same call, and the model
+  doesn't reliably prioritize between them. `buildTextPageImagePrompt` now takes an optional hero
+  name + reference count and explicitly tells the model which leading reference images are the
+  hero (preserve exactly) vs. secondary cast (identity only, must not influence the hero).
+
 ### Fixed — non-default art styles were dominated by the reference image's own rendering
 - Reported as "Ghibli looks the same as Vintage Watercolor" — confirmed live: reference-conditioned
   generation was copying the reference photo's own texture/linework/palette over the requested

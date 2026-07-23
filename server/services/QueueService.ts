@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Job, JobType, IllustrationStyle } from "../../src/types.js";
+import { Job, JobType, IllustrationStyle, Character } from "../../src/types.js";
 import { JobRepository } from "../repositories/JobRepository.js";
 import { CharacterRepository } from "../repositories/CharacterRepository.js";
 import { BookRepository } from "../repositories/BookRepository.js";
@@ -15,6 +15,8 @@ import { storyLibraryController } from "../controllers/StoryLibraryController.js
 import { layoutPlanStore } from "./LayoutPlanStore.js";
 import { storageService } from "./StorageService.js";
 import { db } from "../database/db.js";
+import { ArtStyle, getStyle } from "../config/styles.js";
+import { getProtagonistKey, getProtagonistName, personalizeStoryText } from "../config/protagonists.js";
 
 export class QueueService {
   private activeJobsCount = 0;
@@ -182,15 +184,13 @@ export class QueueService {
   }
 
   /**
-   * Generates a persistent character reference sheet
+   * Renders a hero character's reference sheet in the given style, conditioned on their uploaded
+   * photos. Shared by the default-style character-creation job below and by book creation (which
+   * needs the SAME hero re-rendered in whatever style that particular book uses — see
+   * BookController.createBookFromLibrary). Returns the uploaded sheet image URL; does not persist
+   * a CharacterSheet record itself (callers decide where the result belongs).
    */
-  private async executeCharacterSheetJob(job: Job) {
-    const { characterId } = job.payload;
-    const char = await this.characterRepo.findById(characterId);
-    if (!char) throw new Error(`Character ${characterId} not found.`);
-
-    await this.jobRepo.update(job.id, { progress: 30 });
-
+  public async generateHeroReferenceSheet(char: Character, style: ArtStyle = getStyle()): Promise<string> {
     // Resolve the child's uploaded photos as IMAGE references. The reference sheet is now
     // conditioned on the real photos, so the AI derives the child's actual appearance (hair
     // style incl. braids, hair/eye colour, skin tone, facial features) straight from them —
@@ -203,10 +203,10 @@ export class QueueService {
     let visualDetails = notes;
     if (photoRefs.length > 0) {
       visualDetails += (notes ? "\n\n" : "") +
-        "Reference photos of the real child are provided as IMAGE references. Faithfully capture the child's actual appearance from them — hairstyle (including braids/locs/curls), hair colour, skin tone, eye colour, and distinctive facial features — and re-draw the child in the house art style.";
+        "Reference photos of the real child are provided as IMAGE references. Faithfully capture the child's actual appearance from them — hairstyle (including braids/locs/curls), hair colour, skin tone, eye colour, and distinctive facial features — and re-draw the child in the target art style.";
     }
 
-    const prompt = promptEngine.generateCharacterPrompt(char.name, char.age, char.gender, visualDetails);
+    const prompt = promptEngine.generateCharacterPrompt(char.name, char.age, char.gender, visualDetails, style);
 
     // Call configured provider. With photos, generate conditioned on them; otherwise fall back
     // to a text-only sheet (both providers gracefully degrade when no references are supplied).
@@ -215,11 +215,23 @@ export class QueueService {
       ? await openaiProvider.generateImageWithReferences(prompt, photoRefs)
       : await geminiProvider.generateImageWithReferences(prompt, photoRefs, IllustrationStyle.STORYBOOK);
 
-    await this.jobRepo.update(job.id, { progress: 80 });
+    // Offload to GCS (returns a /api/images/... URL); falls back to the inline data URI if
+    // storage is disabled or the upload fails.
+    return storageService.uploadDataUri(rawSheetImage, `sheets/${char.id}-${style.id}-${Date.now()}`);
+  }
 
-    // Offload the generated sheet to GCS (returns a /api/images/... URL); falls back to the
-    // inline data URI if storage is disabled or the upload fails.
-    const sheetImage = await storageService.uploadDataUri(rawSheetImage, `sheets/${characterId}-${Date.now()}`);
+  /**
+   * Generates a persistent character reference sheet (default style; the one stored on the
+   * Character itself and reused across every book unless a book picks a different style).
+   */
+  private async executeCharacterSheetJob(job: Job) {
+    const { characterId } = job.payload;
+    const char = await this.characterRepo.findById(characterId);
+    if (!char) throw new Error(`Character ${characterId} not found.`);
+
+    await this.jobRepo.update(job.id, { progress: 30 });
+    const sheetImage = await this.generateHeroReferenceSheet(char);
+    await this.jobRepo.update(job.id, { progress: 80 });
 
     const sheet = await this.characterRepo.createSheet({
       id: "sheet_" + Math.random().toString(36).substring(2, 11),
@@ -261,14 +273,41 @@ export class QueueService {
     } else {
       // Personalized: the child's real face has to be baked into a fresh render every time, with
       // the story text baked in per the page's chosen layout (same as the template pipeline).
+      const style = getStyle(book.styleId);
+      const story = storyLibraryService.getStory(book.libraryStoryId);
+
+      // The child REPLACES the story's protagonist (e.g. Emma stars in place of Thumbelina). The
+      // template pages bake the protagonist's real name + appearance in and list the protagonist
+      // in characterKeys, so for a personalized book we must (a) NOT send the original
+      // protagonist's reference image — the child's photo is the only hero reference — and
+      // (b) swap the protagonist's name for the child's throughout the text/scene prompt. Pages
+      // for stories with no single designated protagonist (getProtagonistKey === null) fall back
+      // to using the authored cast as-is.
+      const protagonistKey = getProtagonistKey(book.libraryStoryId);
+      const protagonistName = getProtagonistName(book.libraryStoryId, story?.characters || []);
+      const supportingKeys = (page.characterKeys || []).filter((k) => k !== protagonistKey);
+
+      // Supporting cast references in the BOOK'S style — if that style's cast hasn't been
+      // generated for this story yet (via the Story Library's "Generate cast in this style"),
+      // getCharacterImageBase64 returns null for a non-default style rather than falling back to
+      // a different style's art, so that character is simply described in text on this page
+      // instead of photo-conditioned with a mismatched-style reference.
       const referenceImages = (await Promise.all(
-        (page.characterKeys || []).map((key) => storyLibraryService.getCharacterImageBase64(book.libraryStoryId!, key))
+        supportingKeys.map((key) => storyLibraryService.getCharacterImageBase64(book.libraryStoryId!, key, style.id))
       )).filter((ref): ref is { mime: string; data: string } => !!ref);
 
       const hero = await this.characterRepo.findById(book.characterId);
+      let heroRefCount = 0;
       if (hero) {
         const heroRefs: { mime: string; data: string }[] = [];
-        if (hero.characterSheetId) {
+        // A book rendered in a non-default style gets the hero re-drawn in THAT style once at
+        // book-creation time (see BookController.createBookFromLibrary) — prefer it over the
+        // character's own (likely different-style) sheet so the hero doesn't fight the page's
+        // art style on every single render.
+        const styledSheetRef = book.heroStyledSheetUrl ? await storageService.resolveReference(book.heroStyledSheetUrl) : null;
+        if (styledSheetRef) {
+          heroRefs.push(styledSheetRef);
+        } else if (hero.characterSheetId) {
           const sheet = await this.characterRepo.findSheetById(hero.characterSheetId);
           const ref = sheet?.sheetImage ? await storageService.resolveReference(sheet.sheetImage) : null;
           if (ref) heroRefs.push(ref);
@@ -279,18 +318,25 @@ export class QueueService {
         }
         // Hero references go first so the protagonist's likeness is prioritized.
         referenceImages.unshift(...heroRefs);
+        heroRefCount = heroRefs.length;
       }
 
-      const scenePrompt = page.illustrationPrompt.replace(/MAIN_CHARACTER/g, book.childName);
-      const storyText = (page.storyText || "").replace(/MAIN_CHARACTER/g, book.childName);
-      const story = storyLibraryService.getStory(book.libraryStoryId);
+      // Books created from this version onward already store personalized text (see
+      // BookController.createBookFromLibrary); re-applying here is a no-op for those and repairs
+      // books created BEFORE that change, whose stored text still names the original protagonist.
+      const scenePrompt = personalizeStoryText(page.illustrationPrompt, protagonistName, book.childName);
+      const storyText = personalizeStoryText(page.storyText || "", protagonistName, book.childName);
       const nameOf = (key: string) => story?.characters.find((c) => c.key === key)?.displayName || key;
       const layout = layoutPlanStore.getLayoutById(page.layoutId);
       const imagePrompt = promptEngine.buildTextPageImagePrompt(
         storyText,
         scenePrompt,
         layout.prompt,
-        (page.characterKeys || []).map(nameOf)
+        supportingKeys.map(nameOf), // the hero is named via the `hero` arg below, not this list
+        style,
+        // Only pass a hero name/count when the hero actually contributed reference images —
+        // otherwise the prompt would tell the model to prioritize a reference that isn't there.
+        heroRefCount > 0 ? { name: book.childName, refCount: heroRefCount } : undefined
       );
 
       await this.jobRepo.update(job.id, { progress: 50 });

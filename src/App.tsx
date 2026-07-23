@@ -208,6 +208,14 @@ export default function App() {
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [libraryHeroCharacterId, setLibraryHeroCharacterId] = useState<string>("");
   const [libraryHeroName, setLibraryHeroName] = useState<string>("");
+  const [artStyles, setArtStyles] = useState<{ id: string; label: string }[]>([{ id: "vintage-watercolor", label: "Vintage Watercolor" }]);
+  const [libraryStyleId, setLibraryStyleId] = useState<string>("vintage-watercolor");
+  useEffect(() => {
+    fetch("/api/styles")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (Array.isArray(data) && data.length) setArtStyles(data); })
+      .catch(() => {});
+  }, []);
   const handleCreateFromLibrary = async (libraryStoryId: string) => {
     setIsCreatingFromLibrary(true);
     setLibraryError(null);
@@ -221,6 +229,7 @@ export default function App() {
           libraryStoryId,
           characterId: hero?.id || undefined,
           childName: heroName || undefined,
+          styleId: libraryStyleId,
         }),
       });
       const contentType = res.headers.get("content-type");
@@ -256,6 +265,7 @@ export default function App() {
           libraryStoryId,
           characterId: createdCharacter.id,
           childName: createdCharacter.name,
+          styleId: libraryStyleId,
         }),
       });
       const ct = res.headers.get("content-type");
@@ -935,16 +945,30 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   className="space-y-6"
                 >
-                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      Pick a story for <strong className="text-slate-700">{createdCharacter?.name}</strong> to star in — their photo-based character sheet is used automatically so they look consistent on every page.
-                    </p>
-                    <button
-                      onClick={() => setWizardStep(2)}
-                      className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition whitespace-nowrap"
-                    >
-                      Back
-                    </button>
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Pick a story for <strong className="text-slate-700">{createdCharacter?.name}</strong> to star in — their photo-based character sheet is used automatically so they look consistent on every page.
+                      </p>
+                      <button
+                        onClick={() => setWizardStep(2)}
+                        className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs transition whitespace-nowrap"
+                      >
+                        Back
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Art Style</label>
+                      <select
+                        value={libraryStyleId}
+                        onChange={(e) => setLibraryStyleId(e.target.value)}
+                        className="w-full sm:w-64 text-sm p-2.5 border border-slate-200 rounded-xl bg-slate-50 font-semibold"
+                      >
+                        {artStyles.map((s) => (
+                          <option key={s.id} value={s.id}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   {libraryError && (
                     <div className="text-sm text-red-600 font-medium bg-red-50 border border-red-100 rounded-xl px-3 py-2">{libraryError}</div>
@@ -1108,6 +1132,18 @@ export default function App() {
                       onChange={(e) => setLibraryHeroName(e.target.value)}
                       className="w-full text-sm p-3 border border-slate-200 rounded-xl bg-slate-50 font-semibold"
                     />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Art Style</label>
+                    <select
+                      value={libraryStyleId}
+                      onChange={(e) => setLibraryStyleId(e.target.value)}
+                      className="w-full text-sm p-3 border border-slate-200 rounded-xl bg-slate-50 font-semibold"
+                    >
+                      {artStyles.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 {libraryHeroCharacterId && (

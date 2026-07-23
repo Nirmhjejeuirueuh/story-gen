@@ -177,6 +177,59 @@ export class TemplateStore {
   }
 
   /**
+   * Adds any filesystem story that has no `storyTemplates/{id}` doc yet, with its template doc +
+   * `characters` subcollection (the same shape `seedFromFilesystem` writes). Needed because that
+   * one-time seed only runs when the WHOLE collection is empty, so a story folder added to disk
+   * afterwards never reaches Firestore — and the Story Library reads the Firestore-backed cache,
+   * so a new story would simply never appear in the UI. Pages are intentionally NOT written here:
+   * the redesign generates them on demand ("Generate Pages" / first book creation).
+   * Returns the story ids that were newly added.
+   */
+  async syncMissingStories(): Promise<string[]> {
+    const stories = storyLibraryService.listStories();
+    if (stories.length === 0) return [];
+
+    const existing = await this.col().get();
+    const existingIds = new Set(existing.docs.map((d) => d.id));
+    const missing = stories.filter((s) => !existingIds.has(s.id));
+    if (missing.length === 0) return [];
+
+    const now = new Date().toISOString();
+    for (const story of missing) {
+      const batch = this.db.batch();
+      const storyRef = this.col().doc(story.id);
+
+      const templateDoc: StoryTemplateDoc = {
+        id: story.id,
+        title: story.title,
+        tags: story.tags || [],
+        pageCount: story.numberOfPages,
+        style: STYLE_DEFAULT,
+        description: "",
+        createdAt: now,
+      };
+      batch.set(storyRef, clean(templateDoc));
+
+      const characters: TemplateCharacterDoc[] = story.characters.map((character) => ({
+        key: character.key,
+        name: character.displayName,
+        prompt: storyLibraryService.getCharacterDescription(story.id, character.key),
+        sheetImageUrl: `/api/story-library/${story.id}/characters/${encodeURIComponent(character.key)}/image`,
+        approved: true,
+        createdAt: now,
+      }));
+      for (const charDoc of characters) {
+        batch.set(storyRef.collection("characters").doc(charDoc.key), clean(charDoc));
+      }
+
+      await batch.commit();
+      this.cache.set(story.id, { template: templateDoc, pages: [], characters });
+    }
+
+    return missing.map((s) => s.id);
+  }
+
+  /**
    * Adds any filesystem cast members that are missing from a template's `characters`
    * subcollection in Firestore, without touching characters that already exist there. Needed
    * because `seedFromFilesystem` only runs once (when the collection is first empty) — cast

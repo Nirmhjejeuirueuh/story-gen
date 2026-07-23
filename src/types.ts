@@ -50,6 +50,9 @@ export interface Book {
   characterId?: string; // absent for fixed-cast library storybooks
   templateId: string;
   style: IllustrationStyle;
+  styleId?: string; // Story Library art-style catalogue id (server/config/styles.ts); default when absent
+  heroStyledSheetUrl?: string; // hero's reference sheet re-rendered in THIS book's styleId, when non-default;
+                                // keeps the shared Character's own default-style sheet untouched
   childName: string;
   libraryStoryId?: string; // set when created from a filesystem Story Library entry
   pages: BookPage[];

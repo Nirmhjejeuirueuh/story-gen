@@ -145,6 +145,15 @@ const casts: Record<string, { key: string; desc: string }[]> = {
   "t2-the-starlight-lantern": [
     { key: "little cloud", desc: "a small soft round grey rain cloud with a shy gentle little face, sometimes teary, sometimes smiling" },
   ],
+  "t3-jack-and-the-beanstalk": [
+    { key: "jack", desc: "Jack, a cheerful young boy of about five with tousled brown hair and rosy cheeks, wearing a patched green tunic, brown trousers and simple boots, bright-eyed, curious and brave" },
+    { key: "mother", desc: "Jack's Mother, a kind hard-working woman in a simple grey dress and white apron with her hair tied back in a headscarf, gentle and loving with tired but warm eyes" },
+    { key: "the giant", desc: "The Giant, an enormous round-bellied giant with a big bushy red beard, a rumpled brown tunic and heavy boots, comically huge and grumpy in a silly storybook way rather than frightening" },
+    { key: "milky white", desc: "Milky-White, a gentle white dairy cow with soft brown eyes, long lashes and a little brass bell on a red collar, thin but sweet-natured and calm" },
+    { key: "old man", desc: "The Old Man, a small twinkly-eyed old trader with a long white beard and a patched purple cloak, holding a little pouch of softly glowing magic beans, mysterious but kind" },
+    { key: "golden hen", desc: "The Golden Hen, a plump proud hen with shimmering golden feathers that glow like sunlight, sitting on a small nest of gleaming golden eggs" },
+    { key: "magic harp", desc: "The Magic Harp, a small enchanted golden harp with a gentle carved face on its curved frame and softly glowing strings, able to sing sweetly all on its own" },
+  ],
 };
 
 const storiesRoot = path.join(process.cwd(), "server", "stories");

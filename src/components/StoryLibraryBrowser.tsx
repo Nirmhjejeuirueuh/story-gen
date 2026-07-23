@@ -215,11 +215,16 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ numPages: story.numberOfPages }),
       });
-      const data = res.ok ? await res.json() : null;
-      if (!data?.pages) throw new Error("failed");
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.pages) {
+        // Surface the backend's actual reason (e.g. Gemini quota/billing, invalid JSON) instead of
+        // a generic message — otherwise a credits-exhausted failure is indistinguishable from a
+        // real bug.
+        throw new Error(data?.error || "Page generation failed. Check the text provider in System Settings and try again.");
+      }
       setPages(data.pages);
-    } catch {
-      setPagesError("Page generation failed. Check the text provider in System Settings and try again.");
+    } catch (err: any) {
+      setPagesError(err.message || "Page generation failed. Check the text provider in System Settings and try again.");
     } finally {
       setGeneratingPages(false);
     }

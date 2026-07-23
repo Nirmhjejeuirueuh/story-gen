@@ -6,17 +6,21 @@
 import { Request, Response } from "express";
 import { BookRepository } from "../repositories/BookRepository.js";
 import { JobRepository } from "../repositories/JobRepository.js";
+import { CharacterRepository } from "../repositories/CharacterRepository.js";
 import { QueueService } from "../services/QueueService.js";
 import { storyLibraryService } from "../services/StoryLibraryService.js";
 import { storyLibraryController } from "./StoryLibraryController.js";
 import { JobType, Book, BookPage, IllustrationStyle } from "../../src/types.js";
 import { AuthedRequest } from "../middleware/auth.js";
+import { DEFAULT_STYLE_ID, getStyle } from "../config/styles.js";
+import { getProtagonistName, personalizeStoryText } from "../config/protagonists.js";
 
 export class BookController {
   constructor(
     private bookRepo: BookRepository,
     private jobRepo: JobRepository,
-    private queueService: QueueService
+    private queueService: QueueService,
+    private characterRepo: CharacterRepository
   ) {}
 
   /**
@@ -49,7 +53,7 @@ export class BookController {
    */
   public createBookFromLibrary = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { libraryStoryId, characterId, childName } = req.body;
+      const { libraryStoryId, characterId, childName, styleId } = req.body;
       if (!libraryStoryId) {
         res.status(400).json({ error: "Field 'libraryStoryId' is required." });
         return;
@@ -61,23 +65,9 @@ export class BookController {
         return;
       }
 
+      const style = getStyle(styleId);
       const templatePages = await storyLibraryController.ensurePagesGenerated(libraryStoryId);
       const isPersonalized = !!characterId;
-
-      const pages: BookPage[] = templatePages.map((tp) => {
-        const reusable = !isPersonalized && !!tp.imageUrl;
-        return {
-          id: "page_" + Math.random().toString(36).substring(2, 11),
-          pageNumber: tp.pageNumber,
-          storyText: tp.storyText,
-          illustrationPrompt: tp.illustrationPrompt,
-          characterKeys: tp.characterKeys,
-          layoutId: tp.layoutId,
-          imageUrl: reusable ? tp.imageUrl : undefined,
-          imageStatus: reusable ? "Completed" : "Queued",
-          createdAt: new Date().toISOString()
-        };
-      });
 
       const castNames = story.characters.map((c) => c.displayName).join(", ");
 
@@ -85,6 +75,51 @@ export class BookController {
       // uploaded user stars as the story's MAIN_CHARACTER hero. Their photo/sheet conditions
       // the illustrations and their name fills the narrative. Left blank => generic stock book.
       const heroName = typeof childName === "string" ? childName.trim() : "";
+
+      // The template pages are authored with the ORIGINAL protagonist's real name baked in (the
+      // "Generate Pages" model writes "Thumbelina", not a MAIN_CHARACTER token), so a personalized
+      // book must substitute the child's name into the text it STORES — otherwise Book Preview,
+      // the page editor and the exported PDF would all still read "Thumbelina" even though the
+      // illustrations feature the child.
+      const protagonistName = getProtagonistName(libraryStoryId, story.characters);
+      const personalizeIfHero = (text: string) =>
+        isPersonalized && heroName ? personalizeStoryText(text, protagonistName, heroName) : text;
+
+      const pages: BookPage[] = templatePages.map((tp) => {
+        // A generic (non-personalized) book reuses the TEMPLATE page's image for the requested
+        // style specifically — a non-default style's cached image lives in `imageUrls`, not the
+        // legacy singular `imageUrl` field (which is the default style's mirror only).
+        const cachedImage = style.id === DEFAULT_STYLE_ID ? tp.imageUrl : tp.imageUrls?.[style.id];
+        const reusable = !isPersonalized && !!cachedImage;
+        return {
+          id: "page_" + Math.random().toString(36).substring(2, 11),
+          pageNumber: tp.pageNumber,
+          storyText: personalizeIfHero(tp.storyText),
+          illustrationPrompt: personalizeIfHero(tp.illustrationPrompt),
+          characterKeys: tp.characterKeys,
+          layoutId: tp.layoutId,
+          imageUrl: reusable ? cachedImage : undefined,
+          imageStatus: reusable ? "Completed" : "Queued",
+          createdAt: new Date().toISOString()
+        };
+      });
+
+      // If this book is rendered in a non-default style and has a hero, re-render the hero's
+      // reference sheet in THAT style once now — otherwise every page would fight between the
+      // book's chosen art style and a hero reference still drawn in whatever style the
+      // character's own (shared, reused-across-books) sheet happens to be in. Stored on the BOOK,
+      // not the Character, so this never touches the character's original sheet used elsewhere.
+      let heroStyledSheetUrl: string | undefined;
+      if (isPersonalized && style.id !== DEFAULT_STYLE_ID) {
+        const hero = await this.characterRepo.findById(characterId);
+        if (hero) {
+          try {
+            heroStyledSheetUrl = await this.queueService.generateHeroReferenceSheet(hero, style);
+          } catch (err: any) {
+            console.error(`[BookController] Failed to render hero sheet in style ${style.id}, falling back to the character's default sheet:`, err.message);
+          }
+        }
+      }
 
       const book: Book = {
         id: "book_" + Math.random().toString(36).substring(2, 11),
@@ -95,6 +130,8 @@ export class BookController {
         templateId: story.id,
         libraryStoryId: story.id,
         style: IllustrationStyle.STORYBOOK,
+        styleId: style.id,
+        heroStyledSheetUrl,
         childName: heroName || castNames || story.title,
         pages,
         createdAt: new Date().toISOString()
