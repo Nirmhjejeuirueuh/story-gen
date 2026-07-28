@@ -17,6 +17,8 @@ import { storageService } from "./StorageService.js";
 import { db } from "../database/db.js";
 import { ArtStyle, getStyle } from "../config/styles.js";
 import { getProtagonistKey, getProtagonistName, personalizeStoryText } from "../config/protagonists.js";
+import { getCoverScene } from "../config/coverPrompts.js";
+import { getCoverTitle } from "../config/coverTitles.js";
 
 export class QueueService {
   private activeJobsCount = 0;
@@ -152,6 +154,8 @@ export class QueueService {
           await this.withTimeout(this.executeCharacterSheetJob(job), timeout, label);
         } else if (job.type === JobType.IMAGE) {
           await this.withTimeout(this.executeImageJob(job), timeout, label);
+        } else if (job.type === JobType.COVER) {
+          await this.withTimeout(this.executeCoverJob(job), timeout, label);
         } else if (job.type === JobType.PDF) {
           await this.withTimeout(this.executePDFJob(job), timeout, label);
         }
@@ -173,6 +177,14 @@ export class QueueService {
             await this.bookRepo.updatePage(job.payload.bookId, job.payload.pageNumber, {
               imageStatus: "Failed",
               imageError: error.message || "Illustration generation failed."
+            });
+          }
+
+          // Propagate cover failure to the book so the UI can surface a retry.
+          if (job.type === JobType.COVER && job.payload?.bookId) {
+            await this.bookRepo.update(job.payload.bookId, {
+              coverImageStatus: "Failed",
+              coverImageError: error.message || "Cover generation failed."
             });
           }
         } else {
@@ -362,6 +374,96 @@ export class QueueService {
       status: "Completed",
       progress: 100,
       result: { bookId, pageNumber, imageUrl: imageUrl.slice(0, 100) + "..." }
+    });
+  }
+
+  /**
+   * Generates a book's FRONT COVER — hero-conditioned, with the (personalized) story title baked
+   * in. A generic book reuses the story template's cached cover for its style (instant, no spend);
+   * a personalized book renders its own — the child is the hero and the title is personalized
+   * (e.g. "Alice's Adventures in Wonderland" → "Emma's Adventures in Wonderland").
+   */
+  private async executeCoverJob(job: Job) {
+    const { bookId } = job.payload;
+    const book = await this.bookRepo.findById(bookId);
+    if (!book) throw new Error(`Book ${bookId} not found.`);
+    if (!book.libraryStoryId) throw new Error(`Book ${bookId} has no libraryStoryId — cannot resolve its cover.`);
+
+    await this.bookRepo.update(bookId, { coverImageStatus: "Generating" });
+    await this.jobRepo.update(job.id, { progress: 30 });
+
+    let coverImageUrl: string;
+
+    if (!book.characterId) {
+      // Generic (non-personalized) book: render the template cover for this style and cache it on
+      // the template. This is an explicit user click, so it always (re)renders — matching every
+      // other "Regenerate" action in the app — rather than silently reusing a stale cached cover.
+      coverImageUrl = await storyLibraryController.generateCoverImageForStory(book.libraryStoryId, book.styleId);
+    } else {
+      // Personalized: the child is the hero and the title is personalized, so render fresh.
+      const style = getStyle(book.styleId);
+      const story = storyLibraryService.getStory(book.libraryStoryId);
+      const protagonistName = getProtagonistName(book.libraryStoryId, story?.characters || []);
+      // Per-story heading: personalized where it still reads as that story (e.g. "Emma's Adventures
+      // in Wonderland"), otherwise the plain default (e.g. "Thumbelina") — never a blind name-swap
+      // that would collapse a name-only title to just the child's name.
+      const title = getCoverTitle(book.libraryStoryId, book.childName, story?.title || book.title);
+
+      // Hero references: the styled sheet (non-default style) or the character's default sheet,
+      // then up to 3 uploaded photos — same priority order as page rendering (executeImageJob).
+      const hero = await this.characterRepo.findById(book.characterId);
+      const heroRefs: { mime: string; data: string }[] = [];
+      if (hero) {
+        const styledSheetRef = book.heroStyledSheetUrl ? await storageService.resolveReference(book.heroStyledSheetUrl) : null;
+        if (styledSheetRef) {
+          heroRefs.push(styledSheetRef);
+        } else if (hero.characterSheetId) {
+          const sheet = await this.characterRepo.findSheetById(hero.characterSheetId);
+          const ref = sheet?.sheetImage ? await storageService.resolveReference(sheet.sheetImage) : null;
+          if (ref) heroRefs.push(ref);
+        }
+        for (const photo of (hero.photos || []).slice(0, 3)) {
+          const ref = await storageService.resolveReference(photo);
+          if (ref) heroRefs.push(ref);
+        }
+      }
+
+      // Prefer the story's hand-written iconic cover scene (coverPrompts.ts), personalized so
+      // "the hero" reads as the child; fall back to the book's opening page, then a generic hint.
+      const firstPage = [...book.pages].sort((a, b) => a.pageNumber - b.pageNumber)[0];
+      const sceneHint = personalizeStoryText(
+        getCoverScene(book.libraryStoryId)
+          || firstPage?.illustrationPrompt?.trim()
+          || `A warm, inviting scene that captures the spirit of "${title}".`,
+        protagonistName,
+        book.childName
+      );
+
+      await this.jobRepo.update(job.id, { progress: 50 });
+
+      const imagePrompt = promptEngine.buildCoverImagePrompt(
+        title,
+        book.childName,
+        sceneHint,
+        style,
+        heroRefs.length > 0 ? { name: book.childName, refCount: heroRefs.length } : undefined
+      );
+
+      const imageProvider = db.settings?.imageProvider || "gemini";
+      const dataUri = imageProvider === "openai"
+        ? await openaiProvider.generateImageWithReferences(imagePrompt, heroRefs)
+        : (imageProvider === "procedural"
+            ? geminiProvider.createProceduralIllustration(imagePrompt, book.style)
+            : await geminiProvider.generateImageWithReferences(imagePrompt, heroRefs, book.style));
+
+      coverImageUrl = await storageService.uploadDataUri(dataUri, `covers/${bookId}/cover-${Date.now()}`);
+    }
+
+    await this.bookRepo.update(bookId, { coverImageUrl, coverImageStatus: "Completed", coverImageError: undefined });
+    await this.jobRepo.update(job.id, {
+      status: "Completed",
+      progress: 100,
+      result: { bookId, coverImageUrl: coverImageUrl.slice(0, 100) + "..." }
     });
   }
 

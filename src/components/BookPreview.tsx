@@ -6,10 +6,12 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { Book, BookPage } from "../types.js";
 import { personalizeStoryText } from "../utils/personalize.js";
-import { BookOpen, Grid, ChevronLeft, ChevronRight, Sparkles, Image as ImageIcon } from "lucide-react";
+import { BookOpen, Grid, ChevronLeft, ChevronRight, Sparkles, Image as ImageIcon, Wand2 } from "lucide-react";
 
 interface BookPreviewProps {
   book: Book;
+  /** Triggers on-demand front-cover generation (hero-conditioned, title baked in). */
+  onGenerateCover?: () => void;
 }
 
 const SERIF = "'Iowan Old Style', 'Palatino Linotype', 'Palatino', Georgia, 'Times New Roman', serif";
@@ -39,13 +41,13 @@ function CornerFlourish({ position }: { position: "tl" | "tr" | "bl" | "br" }) {
   );
 }
 
-export default function BookPreview({ book }: BookPreviewProps) {
+export default function BookPreview({ book, onGenerateCover }: BookPreviewProps) {
   const [viewMode, setViewMode] = useState<"flip" | "grid">("flip");
 
   // ---- Build the ordered list of single-page "faces": [Cover, ...story pages, The End] ----
   const faces = useMemo(() => {
     const nodes: React.ReactNode[] = [];
-    nodes.push(<CoverFace book={book} />);
+    nodes.push(<CoverFace book={book} onGenerateCover={onGenerateCover} />);
     book.pages
       .slice()
       .sort((a, b) => a.pageNumber - b.pageNumber)
@@ -56,7 +58,7 @@ export default function BookPreview({ book }: BookPreviewProps) {
     if (nodes.length % 2 === 0) nodes.push(<BlankFace />);
     nodes.push(<EndFace childName={book.childName} />);
     return nodes;
-  }, [book]);
+  }, [book, onGenerateCover]);
 
   const leafCount = faces.length / 2;
 
@@ -320,19 +322,26 @@ export default function BookPreview({ book }: BookPreviewProps) {
       {/* --- THUMBNAIL GRID VIEW --- */}
       {viewMode === "grid" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6" id="thumbnail-grid">
-          <div className="bg-gradient-to-br from-amber-700 via-amber-800 to-stone-900 text-white rounded-2xl p-5 shadow-md flex flex-col justify-between aspect-square select-none">
-            <div>
-              <span className="text-[9px] font-bold uppercase bg-white/20 px-2 py-0.5 rounded-full">Book Cover</span>
-              <h4 className="font-extrabold text-lg mt-2" style={{ fontFamily: SERIF }}>
-                {book.title}
-              </h4>
-              <p className="text-[11px] text-amber-100 italic mt-0.5">{book.coverTitle}</p>
+          {book.coverImageStatus === "Completed" && book.coverImageUrl ? (
+            <div className="relative rounded-2xl overflow-hidden shadow-md aspect-square select-none">
+              <img src={book.coverImageUrl} alt="Book cover" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+              <span className="absolute top-2 left-2 text-[9px] font-bold uppercase bg-black/45 text-white px-2 py-0.5 rounded-full">Book Cover</span>
             </div>
-            <div className="text-4xl text-center">📖</div>
-            <span className="text-[9px] font-bold text-amber-200 block border-t border-white/10 pt-2">
-              STARRING: {book.childName}
-            </span>
-          </div>
+          ) : (
+            <div className="bg-gradient-to-br from-amber-700 via-amber-800 to-stone-900 text-white rounded-2xl p-5 shadow-md flex flex-col justify-between aspect-square select-none">
+              <div>
+                <span className="text-[9px] font-bold uppercase bg-white/20 px-2 py-0.5 rounded-full">Book Cover</span>
+                <h4 className="font-extrabold text-lg mt-2" style={{ fontFamily: SERIF }}>
+                  {book.title}
+                </h4>
+                <p className="text-[11px] text-amber-100 italic mt-0.5">{book.coverTitle}</p>
+              </div>
+              <div className="text-4xl text-center">{book.coverImageStatus === "Queued" || book.coverImageStatus === "Generating" ? "🎨" : "📖"}</div>
+              <span className="text-[9px] font-bold text-amber-200 block border-t border-white/10 pt-2">
+                STARRING: {book.childName}
+              </span>
+            </div>
+          )}
 
           {book.pages.map((p) => (
             <div key={p.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between aspect-square">
@@ -444,10 +453,51 @@ function PageFace({ page }: { page: BookPage }) {
   );
 }
 
-function CoverFace({ book }: { book: Book }) {
+function CoverFace({ book, onGenerateCover }: { book: Book; onGenerateCover?: () => void }) {
+  const generating = book.coverImageStatus === "Queued" || book.coverImageStatus === "Generating";
+
+  // Once the AI cover (hero-conditioned, title baked in) is ready, show it full-bleed like a page.
+  // Until then — or for older books created before covers existed — fall back to the CSS cover,
+  // which carries the on-demand "Generate Cover" button.
+  if (book.coverImageStatus === "Completed" && book.coverImageUrl) {
+    return (
+      <div className="relative w-full h-full overflow-hidden" style={PARCHMENT}>
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url("${book.coverImageUrl}")`,
+            backgroundSize: "cover",
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "center",
+          }}
+        />
+        {onGenerateCover && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onGenerateCover(); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute top-3 right-3 z-10 flex items-center gap-1 text-[10px] font-bold text-white bg-black/45 hover:bg-black/65 px-2.5 py-1 rounded-full backdrop-blur-sm transition"
+            title="Regenerate this cover"
+          >
+            <Wand2 className="h-3 w-3" /> Regenerate
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-full overflow-hidden flex flex-col justify-between p-[9%] text-white" style={{ background: "linear-gradient(150deg, #8a5a1f 0%, #6d4417 45%, #3a2610 100%)" }}>
       <div className="absolute inset-3 border-2 border-amber-200/40 rounded pointer-events-none" />
+      {generating && (
+        <span className="absolute top-3 right-3 text-[9px] font-semibold text-amber-100/80 bg-black/25 px-2 py-0.5 rounded-full animate-pulse">
+          Designing cover…
+        </span>
+      )}
+      {book.coverImageStatus === "Failed" && (
+        <span className="absolute top-3 right-3 text-[9px] font-semibold text-red-100 bg-red-900/50 px-2 py-0.5 rounded-full">
+          Cover failed
+        </span>
+      )}
       <div className="text-center">
         <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-white/15 px-3 py-1 rounded-full">A Personalized Storybook</span>
       </div>
@@ -460,7 +510,18 @@ function CoverFace({ book }: { book: Book }) {
             {book.coverTitle}
           </p>
         )}
-        <div className="text-4xl md:text-5xl mt-4">📖</div>
+        <div className="text-4xl md:text-5xl mt-4">{generating ? "🎨" : "📖"}</div>
+        {onGenerateCover && (
+          <button
+            onClick={(e) => { e.stopPropagation(); if (!generating) onGenerateCover(); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            disabled={generating}
+            className="mt-5 inline-flex items-center gap-1.5 text-[11px] md:text-xs font-bold text-amber-950 bg-amber-200 hover:bg-amber-100 disabled:opacity-70 disabled:cursor-default px-4 py-2 rounded-full shadow-lg transition"
+          >
+            <Wand2 className="h-3.5 w-3.5" />
+            {generating ? "Designing cover…" : book.coverImageStatus === "Failed" ? "Try cover again" : "Generate Cover"}
+          </button>
+        )}
       </div>
       <div className="text-center border-t border-white/15 pt-3">
         <p className="text-[11px] tracking-widest uppercase text-amber-100/80" style={{ fontFamily: SERIF }}>

@@ -178,5 +178,41 @@ ${cast ? `\nKeep these characters' IDENTITY perfectly consistent with the provid
 Premium printed picture-book quality.${hasText ? " The rendered text MUST be spelled correctly, cleanly kerned, and easy for a child to read." : ""} Do not add any other text, captions, page numbers, or watermarks${hasText ? " beyond the story text above" : ""}.`;
   }
 
+  /**
+   * Builds the image prompt for a book's title illustration — the hero as focal subject, the story
+   * title lettered onto the scene, full-bleed and square. This is deliberately a FLAT illustration
+   * exactly like an interior page (not a photo of a physical book): earlier wording like "front
+   * cover"/"published book cover" made the model render a 3D hardback with a spine, binding and
+   * page edges, which we never want. Personalization happens in the title the caller passes
+   * ("Alice's Adventures in Wonderland" → "Emma's Adventures in Wonderland") and via the hero
+   * reference images. Like buildTextPageImagePrompt, an optional `hero` names how many leading
+   * reference images are the hero so their likeness isn't diluted by a secondary cast reference.
+   */
+  public buildCoverImagePrompt(
+    title: string,
+    heroName: string | null,
+    sceneHint: string,
+    style: ArtStyle = getStyle(),
+    hero?: { name: string; refCount: number }
+  ): string {
+    return `Create ONE single flat square illustration, rendered in this exact art style: ${style.promptFragment}. This is a FLAT 2D artwork exactly like a page from a storybook — NOT a photograph of a physical book.
+
+- ${heroName ? `${heroName} is the clear hero and focal subject, shown front-and-center in a warm, appealing hero pose that captures the spirit of the story.` : `A single clear focal character captures the spirit of the story.`}
+- Surround the hero with a rich, inviting background that evokes the story's world (drawn from the scene/mood below).
+- Keep one clear, uncluttered area (typically the upper third) where the title sits legibly over the art.
+
+TITLE — render this EXACT text as a large title lettered directly onto the illustration, bold and beautifully hand-lettered as display typography, spelled EXACTLY with no extra or missing words:
+"""
+${title}
+"""
+The title must be the most prominent text in the image, elegantly integrated into the artwork (never a plain rectangular box or panel), fully legible, in a colour that harmonizes with the illustration's palette (avoid harsh pure black).
+
+SCENE / MOOD to evoke in the art:
+${sceneHint}
+${hero ? `\nThe FIRST ${hero.refCount} reference image(s) provided are the story's HERO, ${hero.name} — the single most important character in this image. Preserve ${hero.name}'s exact face, proportions, and identity from those reference images above everything else; every other reference image is a SECONDARY supporting character only and must NOT influence ${hero.name}'s appearance in any way.` : ""}
+
+CRITICAL — this is a flat square illustration only. Do NOT depict a physical book, a book cover, a hardback, a spine, binding, page edges, a book lying on a surface, a 3D book mock-up, or any shadow/thickness that makes it look like an object. There must be NO border, frame, rounded corners, or edge that reads as the edge of a book — the artwork fills the ENTIRE square edge to edge (full-bleed), with no plain background or empty margin anywhere. The result must be indistinguishable in medium from an interior story page, just with the title lettered across it. Do not add any other text, author name, subtitle, captions, page numbers, or watermarks beyond the title above; the title MUST be spelled correctly and easy for a child to read.${this.styleOverrideDirective(style)}`;
+  }
+
 }
 export const promptEngine = new PromptEngine();

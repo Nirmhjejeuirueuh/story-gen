@@ -96,9 +96,10 @@ export default function App() {
   // Adaptive fast polling: while the active book still has illustrations queued or
   // generating, refresh it every 1.5s so page statuses (Queued → Drawing → Ready)
   // update live. Stops automatically once every page has finished rendering.
-  const activeBookHasPendingPages = !!activeBook?.pages?.some(
-    (p) => p.imageStatus === "Queued" || p.imageStatus === "Generating"
-  );
+  const activeBookHasPendingPages =
+    !!activeBook?.pages?.some((p) => p.imageStatus === "Queued" || p.imageStatus === "Generating") ||
+    activeBook?.coverImageStatus === "Queued" ||
+    activeBook?.coverImageStatus === "Generating";
   useEffect(() => {
     if (!activeBook?.id || !activeBookHasPendingPages) return;
     const fastInterval = setInterval(() => {
@@ -371,6 +372,19 @@ export default function App() {
     }
   };
 
+  // On-demand front-cover generation. Optimistically flips the book to "Queued" so the button
+  // shows "Designing cover…" immediately; the poll loop then picks up the rendered image.
+  const handleGenerateCover = async () => {
+    if (!activeBook) return;
+    setActiveBook({ ...activeBook, coverImageStatus: "Queued", coverImageError: undefined });
+    try {
+      await fetch(`/api/books/${activeBook.id}/generate-cover`, { method: "POST" });
+      refreshActiveBook();
+    } catch (err) {
+      console.error("Cover generation trigger failed:", err);
+    }
+  };
+
   const handleRegeneratePageIllustration = async (pageNumber: number) => {
     if (!activeBook) return;
     setIsRegeneratingPageId(pageNumber);
@@ -625,15 +639,26 @@ export default function App() {
                         key={book.id}
                         className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between"
                       >
-                        <div className="aspect-[16/10] bg-slate-900 text-white p-5 flex flex-col justify-between border-b border-slate-200 select-none">
-                          <div>
-                            <span className="text-[9px] font-black uppercase bg-emerald-500/20 px-2 py-0.5 rounded-full text-emerald-400">
-                              Compiled Book
-                            </span>
-                            <h5 className="font-extrabold text-base mt-2 line-clamp-1">{book.title}</h5>
-                            <p className="text-xs text-slate-300 italic line-clamp-1">{book.coverTitle}</p>
-                          </div>
-                          <span className="text-3xl text-center">📖</span>
+                        <div className="aspect-[16/10] relative overflow-hidden bg-slate-900 text-white border-b border-slate-200 select-none">
+                          {book.coverImageStatus === "Completed" && book.coverImageUrl ? (
+                            <>
+                              <img src={book.coverImageUrl} alt={book.title} referrerPolicy="no-referrer" className="absolute inset-0 w-full h-full object-cover" />
+                              <span className="absolute top-3 left-3 text-[9px] font-black uppercase bg-black/50 px-2 py-0.5 rounded-full text-emerald-300">
+                                Compiled Book
+                              </span>
+                            </>
+                          ) : (
+                            <div className="absolute inset-0 p-5 flex flex-col justify-between">
+                              <div>
+                                <span className="text-[9px] font-black uppercase bg-emerald-500/20 px-2 py-0.5 rounded-full text-emerald-400">
+                                  Compiled Book
+                                </span>
+                                <h5 className="font-extrabold text-base mt-2 line-clamp-1">{book.title}</h5>
+                                <p className="text-xs text-slate-300 italic line-clamp-1">{book.coverTitle}</p>
+                              </div>
+                              <span className="text-3xl text-center">📖</span>
+                            </div>
+                          )}
                         </div>
                         <div className="p-4 flex justify-between items-center bg-slate-50">
                           <div className="text-[10px] font-bold text-slate-400 uppercase">
@@ -1014,7 +1039,7 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   className="space-y-8"
                 >
-                  <BookPreview book={activeBook} />
+                  <BookPreview book={activeBook} onGenerateCover={handleGenerateCover} />
 
                   <div className="border-t border-slate-200 pt-6">
                     <h4 className="font-extrabold text-slate-800 text-base mb-4 flex items-center gap-1.5">
@@ -1183,15 +1208,26 @@ export default function App() {
                       key={book.id}
                       className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md"
                     >
-                      <div className="aspect-[16/10] bg-gradient-to-br from-emerald-600 to-slate-900 text-white p-5 flex flex-col justify-between border-b border-slate-200 select-none">
-                        <div>
-                          <span className="text-[9px] font-bold uppercase bg-white/20 px-2 py-0.5 rounded-full">
-                            Custom Book
-                          </span>
-                          <h4 className="font-extrabold text-base mt-2 line-clamp-1">{book.title}</h4>
-                          <p className="text-xs text-slate-300 italic line-clamp-1">{book.coverTitle}</p>
-                        </div>
-                        <span className="text-4xl text-center">📖</span>
+                      <div className="aspect-[16/10] relative overflow-hidden bg-gradient-to-br from-emerald-600 to-slate-900 text-white border-b border-slate-200 select-none">
+                        {book.coverImageStatus === "Completed" && book.coverImageUrl ? (
+                          <>
+                            <img src={book.coverImageUrl} alt={book.title} referrerPolicy="no-referrer" className="absolute inset-0 w-full h-full object-cover" />
+                            <span className="absolute top-3 left-3 text-[9px] font-bold uppercase bg-black/50 px-2 py-0.5 rounded-full">
+                              Custom Book
+                            </span>
+                          </>
+                        ) : (
+                          <div className="absolute inset-0 p-5 flex flex-col justify-between">
+                            <div>
+                              <span className="text-[9px] font-bold uppercase bg-white/20 px-2 py-0.5 rounded-full">
+                                Custom Book
+                              </span>
+                              <h4 className="font-extrabold text-base mt-2 line-clamp-1">{book.title}</h4>
+                              <p className="text-xs text-slate-300 italic line-clamp-1">{book.coverTitle}</p>
+                            </div>
+                            <span className="text-4xl text-center">📖</span>
+                          </div>
+                        )}
                       </div>
                       <div className="p-4 bg-slate-50/50 flex justify-between items-center border-t border-slate-100">
                         <span className="text-[10px] font-bold text-slate-500 uppercase">Child: {book.childName}</span>

@@ -362,6 +362,27 @@ export class TemplateStore {
     }
   }
 
+  /**
+   * Records the template-level FRONT COVER image for one style on the story doc, reused by every
+   * generic (non-personalized) book of this story. Same nested-map handling as setPageImage: build
+   * the full merged `coverImageUrls` map from the cache (never a dotted key, which set(...,{merge})
+   * would store literally), and mirror the default style into the legacy singular `coverImageUrl`.
+   */
+  async setCoverImage(storyId: string, styleId: string, imageUrl: string): Promise<void> {
+    const entry = this.cache.get(storyId);
+    const coverImageUrls = { ...entry?.template.coverImageUrls, [styleId]: imageUrl };
+
+    const patch: Partial<StoryTemplateDoc> = { coverImageUrls };
+    if (styleId === DEFAULT_STYLE_ID) patch.coverImageUrl = imageUrl;
+
+    await this.col().doc(storyId).set(clean(patch), { merge: true });
+
+    if (entry) {
+      entry.template.coverImageUrls = coverImageUrls;
+      if (styleId === DEFAULT_STYLE_ID) entry.template.coverImageUrl = imageUrl;
+    }
+  }
+
   /** REDESIGN: merges a partial update into one generated page (edit text/prompt/layout/image). */
   async updatePage(storyId: string, pageNumber: number, patch: Partial<TemplatePageDoc>): Promise<TemplatePageDoc | null> {
     const storyRef = this.col().doc(storyId);

@@ -15,6 +15,9 @@ import { db } from "../database/db.js";
 import { IllustrationStyle, TemplatePageDoc } from "../../src/types.js";
 import { DEFAULT_LAYOUT_PLAN_ID } from "../config/layouts.js";
 import { ART_STYLES, DEFAULT_STYLE_ID, getStyle } from "../config/styles.js";
+import { getProtagonistKey } from "../config/protagonists.js";
+import { getCoverScene } from "../config/coverPrompts.js";
+import { getCoverTitle } from "../config/coverTitles.js";
 
 /**
  * Extracts the single balanced { ... } JSON object from a text-model response, ignoring any
@@ -228,6 +231,72 @@ export class StoryLibraryController {
     if (existing) return existing;
     return this.generatePageImageForStory(id, pageNum, styleId);
   }
+
+  /**
+   * REDESIGN — generates this story's template FRONT COVER for a style: the story's protagonist as
+   * the hero, the ORIGINAL story title baked in, conditioned on the protagonist's cast reference so
+   * their likeness matches the interior pages. Stored on the story template and reused by every
+   * generic (non-personalized) book of this story. Personalized books render their own cover per
+   * book (hero = the child, title personalized) — see QueueService.executeCoverJob.
+   */
+  public async generateCoverImageForStory(id: string, styleId: string = DEFAULT_STYLE_ID): Promise<string> {
+    const style = getStyle(styleId);
+    const story = templateStore.getStory(id) ?? storyLibraryService.getStory(id);
+    if (!story) throw new Error("Story library entry not found.");
+
+    // Hero = the story's designated protagonist; if the story has none (ensemble cast), fall back
+    // to its first cast member so the cover still features a real character reference.
+    const protagonistKey = getProtagonistKey(id);
+    const heroKey = protagonistKey && story.characters.some((c) => c.key === protagonistKey)
+      ? protagonistKey
+      : story.characters[0]?.key;
+    const heroName = story.characters.find((c) => c.key === heroKey)?.displayName || null;
+
+    const heroRef = heroKey ? await storyLibraryService.getCharacterImageBase64(id, heroKey, style.id) : null;
+    const references = heroRef ? [heroRef] : [];
+
+    // Prefer the story's hand-written iconic cover scene (coverPrompts.ts) so the cover is the
+    // RIGHT recognizable scene for this story; fall back to the opening page, then a generic hint.
+    const pages = templateStore.getPages(id);
+    const sceneHint = getCoverScene(id)
+      || pages?.[0]?.illustrationPrompt?.trim()
+      || `A warm, inviting scene that captures the spirit of "${story.title}".`;
+
+    // Template cover has no child — always the story's default heading.
+    const title = getCoverTitle(id, null, story.title);
+    const imagePrompt = promptEngine.buildCoverImagePrompt(
+      title,
+      heroName,
+      sceneHint,
+      style,
+      heroRef && heroName ? { name: heroName, refCount: 1 } : undefined
+    );
+
+    const imageProvider = db.settings?.imageProvider || "gemini";
+    const dataUri = imageProvider === "openai"
+      ? await openaiProvider.generateImageWithReferences(imagePrompt, references)
+      : (imageProvider === "procedural"
+          ? geminiProvider.createProceduralIllustration(imagePrompt, IllustrationStyle.STORYBOOK)
+          : await geminiProvider.generateImageWithReferences(imagePrompt, references, IllustrationStyle.STORYBOOK));
+
+    const imageUrl = await storageService.uploadDataUri(dataUri, `covers/${id}/${style.id}/cover-${Date.now()}`);
+    await templateStore.setCoverImage(id, style.id, imageUrl);
+    return imageUrl;
+  }
+
+  /** Explicitly (re)generates a story template's cover for a style — always overwrites (see generateCastForStyle). */
+  public generateCoverImage = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const styleId = getStyle((req.body?.styleId as string) || (req.query.styleId as string)).id;
+      const imageUrl = await this.generateCoverImageForStory(id, styleId);
+      res.status(200).json({ success: true, styleId, imageUrl });
+    } catch (error: any) {
+      console.error("[StoryLibraryController] Error generating cover image:", error);
+      const status = /not found/i.test(error.message) ? 404 : 500;
+      res.status(status).json({ error: "Failed to generate cover image: " + error.message });
+    }
+  };
 
   public generatePageImage = async (req: Request, res: Response): Promise<void> => {
     try {

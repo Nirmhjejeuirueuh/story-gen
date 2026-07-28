@@ -14,6 +14,31 @@ interface PDFExportDialogProps {
   book: Book;
 }
 
+/** Old hand-drawn cover (brown gradient block + title text) — fallback for a book with no generated cover yet. */
+function drawCoverPlaceholder(doc: jsPDF, book: Book, size: number, contentW: number) {
+  doc.setFillColor(109, 68, 23); // Warm brown, matches CoverFace gradient midtone
+  doc.rect(0, 0, size, size, "F");
+  doc.setDrawColor(230, 200, 150);
+  doc.setLineWidth(1.5);
+  doc.rect(14, 14, size - 28, size - 28);
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(30);
+  doc.text(doc.splitTextToSize(book.title, contentW), size / 2, size / 2 - 60, { align: "center" });
+
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(15);
+  doc.text(doc.splitTextToSize(book.coverTitle || "", contentW), size / 2, size / 2, { align: "center" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(28);
+  doc.text("📖", size / 2, size / 2 + 70, { align: "center" });
+
+  doc.setFontSize(11);
+  doc.text(`Starring ${book.childName}`, size / 2, size - 50, { align: "center" });
+}
+
 export default function PDFExportDialog({ book }: PDFExportDialogProps) {
   const [exportingPDF, setExportingPDF] = useState(false);
   const [exportingZIP, setExportingZIP] = useState(false);
@@ -36,28 +61,19 @@ export default function PDFExportDialog({ book }: PDFExportDialogProps) {
         format: [SIZE, SIZE],
       });
 
-      // 1. Draw cover page (square)
-      doc.setFillColor(109, 68, 23); // Warm brown, matches CoverFace gradient midtone
-      doc.rect(0, 0, SIZE, SIZE, "F");
-      doc.setDrawColor(230, 200, 150);
-      doc.setLineWidth(1.5);
-      doc.rect(14, 14, SIZE - 28, SIZE - 28);
-
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(30);
-      doc.text(doc.splitTextToSize(book.title, CONTENT_W), SIZE / 2, SIZE / 2 - 60, { align: "center" });
-
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(15);
-      doc.text(doc.splitTextToSize(book.coverTitle || "", CONTENT_W), SIZE / 2, SIZE / 2, { align: "center" });
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(28);
-      doc.text("📖", SIZE / 2, SIZE / 2 + 70, { align: "center" });
-
-      doc.setFontSize(11);
-      doc.text(`Starring ${book.childName}`, SIZE / 2, SIZE - 50, { align: "center" });
+      // 1. Cover page (square, full-bleed, no border) — the actual generated cover illustration
+      // (hero-conditioned, title baked into the image itself; see BookPreview's CoverFace). Falls
+      // back to the old hand-drawn placeholder only for books whose cover hasn't been generated yet.
+      if (book.coverImageStatus === "Completed" && book.coverImageUrl) {
+        try {
+          doc.addImage(book.coverImageUrl, "JPEG", 0, 0, SIZE, SIZE);
+        } catch (imgErr) {
+          console.warn("Could not draw cover image in PDF, falling back to placeholder.", imgErr);
+          drawCoverPlaceholder(doc, book, SIZE, CONTENT_W);
+        }
+      } else {
+        drawCoverPlaceholder(doc, book, SIZE, CONTENT_W);
+      }
 
       // 2. Loop through pages — one square PDF page per book page. The story text is baked
       // directly into each generated image (see PromptEngine.buildTextPageImagePrompt), so each

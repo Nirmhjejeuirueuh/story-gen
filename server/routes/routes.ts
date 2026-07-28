@@ -91,6 +91,7 @@ router.get("/story-library/:id/pages", storyLibraryController.getPages);
 router.post("/story-library/:id/generate-pages", storyLibraryController.generatePages);
 router.patch("/story-library/:id/pages/:pageNumber", storyLibraryController.updatePage);
 router.post("/story-library/:id/pages/:pageNumber/generate-image", storyLibraryController.generatePageImage);
+router.post("/story-library/:id/generate-cover", storyLibraryController.generateCoverImage);
 
 // Books Management
 router.post("/books/from-library", bookController.createBookFromLibrary);
@@ -102,6 +103,7 @@ router.get("/books/:id/pages", bookController.getBookPages);
 
 // Page Render batch / single
 router.post("/books/:id/generate", bookController.generateIllustrations);
+router.post("/books/:id/generate-cover", bookController.generateBookCover);
 router.post("/pages/regenerate", bookController.regeneratePageIllustration);
 router.post("/books/:id/export", bookController.exportBook);
 

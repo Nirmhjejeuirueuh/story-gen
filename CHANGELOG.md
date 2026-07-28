@@ -5,6 +5,58 @@ All notable changes to StoryGen are recorded here. Format loosely follows
 
 ## [Unreleased]
 
+### Changed — cover is now a flat illustration, not a 3D book photo
+- `PromptEngine.buildCoverImagePrompt` was telling the model to make a "picture-book FRONT COVER" /
+  "published book's cover", which it took literally — rendering a photo of a physical hardback with
+  a spine, binding and page edges. Rewrote the prompt to ask for a single FLAT square illustration
+  exactly like an interior story page, with the title lettered onto the art, and added an explicit
+  block forbidding any physical-book depiction (spine, binding, page edges, 3D mock-up, book-edge
+  borders). The title, hero-priority and full-bleed rules are unchanged. Regenerate existing covers
+  to pick up the new look.
+
+### Fixed — PDF export ignored the generated cover image
+- `PDFExportDialog`'s PDF cover page was hand-drawn with jsPDF (a brown rectangle + bordered frame
+  + title text) and never looked at `book.coverImageUrl` — so a book with a real AI-generated cover
+  still exported the old placeholder. Now the cover page draws the actual generated cover image
+  full-bleed (0,0 to the full square canvas, no border), matching how page images are already drawn.
+  The hand-drawn version is kept only as `drawCoverPlaceholder()`, used as a fallback for books
+  whose cover hasn't been generated yet. The cover is still always page 1 of the exported PDF.
+
+### Added — on-demand AI front covers for books
+- A book can now get a real illustrated FRONT COVER (square 1:1, same canvas as the pages),
+  replacing the CSS gradient/emoji placeholder. The cover stars the book's main character
+  (conditioned on the hero's reference sheet so it matches the interior art) and bakes the story
+  title into the image. For a personalized book the title is personalized too — e.g. "Alice's
+  Adventures in Wonderland" → "Emma's Adventures in Wonderland" (via `personalizeStoryText`, so it
+  only changes when the title actually contains the protagonist's name).
+- User-triggered, not automatic: a **"Generate Cover"** button on the cover placeholder in
+  `BookPreview` (with a live "Designing cover…" state and a "Regenerate" affordance once done).
+  `POST /api/books/:id/generate-cover` (`BookController.generateBookCover`) queues the render;
+  `App.tsx` optimistically flips the status and the poll loop shows the finished image.
+- **Per-story cover prompts** (`server/config/coverPrompts.ts`): each of the 20 stories has a
+  hand-written iconic cover scene (hero + signature setting/mood), used as the cover's scene hint
+  so it composes the RIGHT recognizable scene rather than guessing from a random interior page.
+  Combined with the per-style prompt fragment, each art style renders that scene distinctly.
+- **Per-story cover headings** (`server/config/coverTitles.ts`): each story has a `default` heading
+  (always including the story name) plus an optional `personalized` template. Fixes the broken
+  heading where running a name-only title ("Thumbelina", "Pollyanna") through the name-swap left the
+  cover reading just the child's name ("Emma", "Sophia"). Now the child's name is used only where it
+  still reads as that story ("Emma's Adventures in Wonderland", "Erik and the Beanstalk"); otherwise
+  the plain default title is shown.
+- The generated cover now appears **everywhere a book is shown** — the My Books cards and the
+  Dashboard "Recent Book Projects" cards render `book.coverImageUrl` when ready (falling back to the
+  gradient placeholder otherwise), in addition to the book/grid preview.
+- Rendering mirrors the page pipeline:
+  - Generic (non-personalized) books reuse a template-cached cover per style, stored on
+    `storyTemplates/{id}` (`coverImageUrl`/`coverImageUrls`) — no repeat spend across generic books.
+  - Personalized books render a fresh cover per book (child as hero, personalized title), stored
+    on `book.coverImageUrl`.
+- New `JobType.COVER` + `QueueService.executeCoverJob`, `PromptEngine.buildCoverImagePrompt`,
+  `StoryLibraryController.generateCoverImageForStory`/`ensureCoverImage` (+ a
+  `POST /api/story-library/:id/generate-cover` route to (re)tune a template cover per style), and
+  `TemplateStore.setCoverImage`/`getCoverImage`. Frontend cover shown full-bleed in both book and
+  grid views once ready.
+
 ### Added — new story: Jack and the Beanstalk (boy hero, 14 pages)
 - New `server/stories/t3-jack-and-the-beanstalk/` (t3 was the one free slot in the numbering):
   14 chapters, `tags.txt`, and a 7-member cast (jack, mother, the giant, milky white, old man,

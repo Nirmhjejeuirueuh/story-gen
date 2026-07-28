@@ -133,6 +133,8 @@ export class BookController {
         styleId: style.id,
         heroStyledSheetUrl,
         childName: heroName || castNames || story.title,
+        // Cover is generated on demand (user clicks "Generate Cover"), not automatically — see
+        // generateBookCover. Until then the book falls back to the CSS cover placeholder.
         pages,
         createdAt: new Date().toISOString()
       };
@@ -311,6 +313,31 @@ export class BookController {
     }
   };
 
+
+  /**
+   * Generates (or regenerates) this book's FRONT COVER on demand — hero-conditioned, with the
+   * (personalized) story title baked in, rendered in the book's style. User-triggered ("Generate
+   * Cover" button), never automatic, so it always (re)renders rather than skipping. The actual
+   * render runs as a background COVER job (see QueueService.executeCoverJob).
+   */
+  public generateBookCover = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const book = await this.bookRepo.findById(id);
+      if (!book || !this.canModifyBook(book, req as AuthedRequest)) {
+        res.status(404).json({ error: "Book not found." });
+        return;
+      }
+
+      await this.bookRepo.update(id, { coverImageStatus: "Queued", coverImageError: undefined });
+      const job = await this.queueService.addJob(JobType.COVER, { bookId: id });
+
+      res.status(200).json({ message: "Cover generation queued.", jobId: job.id });
+    } catch (error: any) {
+      console.error("[BookController] Error queuing cover generation:", error);
+      res.status(500).json({ error: "Failed to queue cover generation: " + error.message });
+    }
+  };
 
   /**
    * Initiates print-ready PDF export job

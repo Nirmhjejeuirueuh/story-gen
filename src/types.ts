@@ -55,6 +55,12 @@ export interface Book {
                                 // keeps the shared Character's own default-style sheet untouched
   childName: string;
   libraryStoryId?: string; // set when created from a filesystem Story Library entry
+  // Front-cover illustration (hero-conditioned, story title baked in — personalized when the book
+  // has a hero, e.g. "Alice's Adventures in Wonderland" → "Emma's Adventures in Wonderland"). Its
+  // own render lifecycle, separate from the pages: generated as a COVER job at book creation.
+  coverImageUrl?: string;
+  coverImageStatus?: 'Queued' | 'Generating' | 'Completed' | 'Failed';
+  coverImageError?: string;
   pages: BookPage[];
   createdAt: string;
 }
@@ -110,6 +116,11 @@ export interface StoryTemplateDoc {
   style: string;
   description?: string;
   layoutPlanId?: string; // which LayoutPlan the AI draws page layouts from (default: "default")
+  // Template-level FRONT COVER (hero = the story's protagonist, original story title), cached per
+  // style and reused by every generic (non-personalized) book of this story. The default style
+  // mirrors into the legacy singular `coverImageUrl`; other styles live only in `coverImageUrls`.
+  coverImageUrl?: string;
+  coverImageUrls?: Record<string, string>;
   createdAt: string;
 }
 
@@ -168,6 +179,7 @@ export enum JobType {
   CHARACTER_SHEET = "Generate Character Sheet",
   STORY = "Generate Story",
   IMAGE = "Generate Image",
+  COVER = "Generate Cover",
   PDF = "Generate PDF"
 }
 
