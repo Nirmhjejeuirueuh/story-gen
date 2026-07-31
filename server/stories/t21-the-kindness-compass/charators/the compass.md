@@ -1,0 +1,1 @@
+The Kindness Compass, a small round antique brass compass with a warm golden case, a delicate glass face and a slender needle that glows faintly, its dial engraved with tiny swirling leaf patterns instead of the usual letters
