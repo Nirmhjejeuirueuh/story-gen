@@ -5,6 +5,14 @@ All notable changes to StoryGen are recorded here. Format loosely follows
 
 ## [Unreleased]
 
+### Removed — 4 stories from the Story Library
+- Removed Jungle Book, The Ugly Duckling, The Starlight Lantern, and The Call of the Wild
+  entirely per owner request: filesystem folders (`server/stories/<id>/`), the Firestore
+  `storyTemplates/{id}` docs + their `pages`/`characters` subcollections, and their generated
+  images in GCS (`pages/<id>/`, `casts/<id>/`). Also deleted the one existing book already
+  created from Jungle Book, including its illustrations. 16 stories remain. Verified: reloaded
+  the template cache and confirmed all 4 are gone with no errors; `tsc`/`vite build` clean.
+
 ### Changed — cover is now a flat illustration, not a 3D book photo
 - `PromptEngine.buildCoverImagePrompt` was telling the model to make a "picture-book FRONT COVER" /
   "published book's cover", which it took literally — rendering a photo of a physical hardback with
