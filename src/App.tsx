@@ -1208,7 +1208,7 @@ export default function App() {
                       key={book.id}
                       className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between transition hover:shadow-md"
                     >
-                      <div className="aspect-[16/10] relative overflow-hidden bg-gradient-to-br from-emerald-600 to-slate-900 text-white border-b border-slate-200 select-none">
+                      <div className="aspect-[10/10] relative overflow-hidden bg-gradient-to-br from-emerald-600 to-slate-900 text-white border-b border-slate-200 select-none">
                         {book.coverImageStatus === "Completed" && book.coverImageUrl ? (
                           <>
                             <img src={book.coverImageUrl} alt={book.title} referrerPolicy="no-referrer" className="absolute inset-0 w-full h-full object-cover" />
