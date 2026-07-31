@@ -1,0 +1,1 @@
+A warm, round, owl-like museum curator character with gentle kind eyes, round wire-rimmed spectacles, a soft rumpled coat covered in colorful patches, small tufts of feathery hair, friendly welcoming posture, watercolor storybook illustration, soft pastel palette, gentle warm light, delicate ink linework, vintage children's book style, white background, no scenery
