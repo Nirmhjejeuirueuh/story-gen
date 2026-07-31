@@ -5,6 +5,54 @@ All notable changes to StoryGen are recorded here. Format loosely follows
 
 ## [Unreleased]
 
+### Added — the remaining 17 original stories (20 total), and removed Aesop's Fables
+- Authored the other 17 stories from the owner's brief, each honouring its specific premise:
+  The New Kid Bench, The Listening Ears, The Word That Flew Away, The Tiny Lie, The Brave Little
+  Ladder, Standing Tall, The Truth Lantern, The Impossible Kite, The Word Yet, The Seed That
+  Wanted Waiting, The Big Sibling Badge, The Memory Quilt, The Borrowed Wings, The Four Coin
+  Kingdoms, The Weather Inside, The Copycat Cloud, The Forgiveness Bridge.
+- Sized to the brief's age hints: 8pp for the youngest (Brave Little Ladder, Seed That Wanted
+  Waiting), up to 14pp for the oldest (Four Coin Kingdoms, ages 6-9). 208 authored pages total.
+- Two titles were adapted because a template title cannot be personalised per child:
+  "[Child] Stands Tall" became **Standing Tall**, "[Child]'s Impossible Kite" became
+  **The Impossible Kite**.
+- 28 new cast portraits generated through the system path (`generate-casts.ts` → `charators/
+  <key>.md` + default-style reference in GCS), so all 20 stories work with the per-style
+  "Generate cast in <style>" button automatically.
+- Deliberately did **not** give the newborn in The Big Sibling Badge a cast portrait: a solo
+  infant reference is exactly the framing that tripped Gemini's `PROHIBITED_CONTENT` filter
+  earlier in this project. The baby only ever appears in scenes with an older sibling or parent.
+- Removed **Aesop's Fables** entirely (filesystem, Firestore template + subcollections, GCS art,
+  and its stale `generate-casts.ts` entry). Two books had been created from it; those were
+  deleted too, following the Jungle Book precedent.
+- Verified across all 20 authored stories: 0 missing cast images, no page referencing an unknown
+  cast key, exactly one wordless layout-7 page per story, and all 7 layouts in healthy rotation
+  (42/38/32/28/26/22/20 uses). `tsc` and `npm run build` clean. 35 stories now live.
+
+### Added — 3 original stories (sample batch) with proper casts
+- Hand-authored three new original stories with page text, per-page illustration prompts and
+  chosen layouts: **The Kindness Compass** (10pp, kindness), **The Mistake Museum** (12pp, growth
+  mindset) and **The Sharing Sandwich** (8pp, generosity). Text uses `MAIN_CHARACTER` with
+  gender-neutral phrasing so any selected character sheet fits. Each includes one wordless
+  layout-7 page at a natural story beat.
+- Gave them casts **through the existing system path** (`server/scripts/generate-casts.ts`) rather
+  than a one-off: named the incidental characters (Theo, Mia, Biscuit) and registered them
+  alongside Mr Higgins, Mrs Petunia, the Curator and the Compass itself (an object, matching the
+  existing "magic harp"/"golden hen" precedent — it appears on 5 pages so its look has to stay
+  consistent). The script writes `charators/<key>.md` + uploads a default-style reference to GCS,
+  which is what makes a character appear as cast AND what the per-style "Generate cast in
+  <style>" button uses as its reference — so the new stories work with the style system for free.
+- Migrated the Curator's portrait from a local repo `.jpg` (off-pattern, from its initial
+  creation) to GCS, so all cast art now lives in one place.
+- **Removed 4 stale entries from the cast map** — Jungle Book, Ugly Duckling, Starlight Lantern
+  and Call of the Wild were deleted from the system earlier, but were still listed; running the
+  script would have recreated their folders and burned ~11 image generations on deleted stories.
+- Verified: all 7 cast portraits resolve, casts appear on all 3 stories, 20 of 30 pages reference
+  cast members, no existing story's art was regenerated (all skipped).
+- Note: the per-story "Generate"/"Regenerate all pages" action overwrites a story's pages with
+  freshly AI-generated text — do not run it on these three, or the authored text is lost.
+  Per-page "Generate Image" is safe.
+
 ### Removed — 4 stories from the Story Library
 - Removed Jungle Book, The Ugly Duckling, The Starlight Lantern, and The Call of the Wild
   entirely per owner request: filesystem folders (`server/stories/<id>/`), the Firestore
