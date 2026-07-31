@@ -26,7 +26,10 @@ only by the owner and his mentor.
 
 ## Data model (two coexisting layers)
 
-- **Story templates** — the 16 shared classic stories.
+- **Story templates** — the 35 shared stories: 15 classic public-domain adaptations plus 20
+  original values-based stories (kindness, honesty, growth mindset, family, feelings).
+  The originals are hand-authored: do NOT run "Generate"/"Regenerate all pages" on them, as that
+  overwrites a story's pages with freshly AI-generated text. Per-page "Generate Image" is safe.
   - Filesystem seed: `server/stories/<id>/` with `chapters/N.md` (illustration prompt +
     `Charators:` line), `charators/<key>.png|.md` (character sheets + description prompts),
     `illustrations/N.*` (cached art), `tags.txt`. Parsed by
