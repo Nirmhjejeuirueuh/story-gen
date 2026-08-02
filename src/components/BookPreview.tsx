@@ -321,23 +321,23 @@ export default function BookPreview({ book, onGenerateCover }: BookPreviewProps)
 
       {/* --- THUMBNAIL GRID VIEW --- */}
       {viewMode === "grid" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6" id="thumbnail-grid">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" id="thumbnail-grid">
           {book.coverImageStatus === "Completed" && book.coverImageUrl ? (
             <div className="relative rounded-2xl overflow-hidden shadow-md aspect-square select-none">
               <img src={book.coverImageUrl} alt="Book cover" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
               <span className="absolute top-2 left-2 text-[9px] font-bold uppercase bg-black/45 text-white px-2 py-0.5 rounded-full">Book Cover</span>
             </div>
           ) : (
-            <div className="bg-gradient-to-br from-amber-700 via-amber-800 to-stone-900 text-white rounded-2xl p-5 shadow-md flex flex-col justify-between aspect-square select-none">
-              <div>
+            <div className="bg-gradient-to-br from-amber-700 via-amber-800 to-stone-900 text-white rounded-2xl p-4 shadow-md flex flex-col justify-between aspect-square select-none overflow-hidden">
+              <div className="min-w-0">
                 <span className="text-[9px] font-bold uppercase bg-white/20 px-2 py-0.5 rounded-full">Book Cover</span>
-                <h4 className="font-extrabold text-lg mt-2" style={{ fontFamily: SERIF }}>
+                <h4 className="font-extrabold text-base mt-2 line-clamp-2" style={{ fontFamily: SERIF }}>
                   {book.title}
                 </h4>
-                <p className="text-[11px] text-amber-100 italic mt-0.5">{book.coverTitle}</p>
+                <p className="text-[10px] text-amber-100 italic mt-0.5 line-clamp-1">{book.coverTitle}</p>
               </div>
-              <div className="text-4xl text-center">{book.coverImageStatus === "Queued" || book.coverImageStatus === "Generating" ? "🎨" : "📖"}</div>
-              <span className="text-[9px] font-bold text-amber-200 block border-t border-white/10 pt-2">
+              <div className="text-3xl text-center">{book.coverImageStatus === "Queued" || book.coverImageStatus === "Generating" ? "🎨" : "📖"}</div>
+              <span className="text-[9px] font-bold text-amber-200 block border-t border-white/10 pt-2 truncate">
                 STARRING: {book.childName}
               </span>
             </div>
@@ -359,8 +359,8 @@ export default function BookPreview({ book, onGenerateCover }: BookPreviewProps)
                 </span>
               </div>
               {p.storyText && (
-                <div className="p-3 bg-slate-50/50 border-t border-slate-100">
-                  <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed text-center" style={{ fontFamily: SERIF }}>
+                <div className="p-2.5 bg-slate-50/50 border-t border-slate-100">
+                  <p className="text-[11px] text-slate-600 font-medium line-clamp-2 leading-snug text-center" style={{ fontFamily: SERIF }}>
                     {personalizeStoryText(p.storyText, book.childName)}
                   </p>
                 </div>

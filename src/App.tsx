@@ -634,8 +634,8 @@ export default function App() {
                   </div>
                 ) : (
                   //dashboard grid
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6"> 
-                    {books.slice(0, 3).map((book) => (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+                    {books.slice(0, 5).map((book) => (
                       <div
                         key={book.id}
                         className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between"
@@ -649,20 +649,20 @@ export default function App() {
                               </span>
                             </>
                           ) : (
-                            <div className="absolute inset-0 p-5 flex flex-col justify-between">
+                            <div className="absolute inset-0 p-4 flex flex-col justify-between">
                               <div>
                                 <span className="text-[9px] font-black uppercase bg-emerald-500/20 px-2 py-0.5 rounded-full text-emerald-400">
                                   Compiled Book
                                 </span>
-                                <h5 className="font-extrabold text-base mt-2 line-clamp-1">{book.title}</h5>
-                                <p className="text-xs text-slate-300 italic line-clamp-1">{book.coverTitle}</p>
+                                <h5 className="font-extrabold text-sm mt-2 line-clamp-2">{book.title}</h5>
+                                <p className="text-[11px] text-slate-300 italic line-clamp-1">{book.coverTitle}</p>
                               </div>
-                              <span className="text-3xl text-center">📖</span>
+                              <span className="text-2xl text-center">📖</span>
                             </div>
                           )}
                         </div>
-                        <div className="p-4 flex justify-between items-center bg-slate-50">
-                          <div className="text-[10px] font-bold text-slate-400 uppercase">
+                        <div className="p-3 flex flex-wrap justify-between items-center gap-x-2 gap-y-1 bg-slate-50">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase truncate min-w-0">
                             Child: {book.childName}
                           </div>
                           <button
@@ -672,7 +672,7 @@ export default function App() {
                               setWizardStep(7); // Go to book preview step in wizard!
                               setActiveTab("wizard");
                             }}
-                            className="text-xs font-bold text-emerald-600 hover:underline"
+                            className="text-[11px] font-bold text-emerald-600 hover:underline whitespace-nowrap"
                           >
                             Open Book →
                           </button>
@@ -1204,7 +1204,7 @@ export default function App() {
                 </div>
               ) : (
                 //my books grid
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6"> 
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
                   {books.map((book) => (
                     <div
                       key={book.id}
@@ -1219,21 +1219,21 @@ export default function App() {
                             </span>
                           </>
                         ) : (
-                          <div className="absolute inset-0 p-5 flex flex-col justify-between">
+                          <div className="absolute inset-0 p-4 flex flex-col justify-between">
                             <div>
                               <span className="text-[9px] font-bold uppercase bg-white/20 px-2 py-0.5 rounded-full">
                                 Custom Book
                               </span>
-                              <h4 className="font-extrabold text-base mt-2 line-clamp-1">{book.title}</h4>
-                              <p className="text-xs text-slate-300 italic line-clamp-1">{book.coverTitle}</p>
+                              <h4 className="font-extrabold text-sm mt-2 line-clamp-2">{book.title}</h4>
+                              <p className="text-[11px] text-slate-300 italic line-clamp-1">{book.coverTitle}</p>
                             </div>
-                            <span className="text-4xl text-center">📖</span>
+                            <span className="text-3xl text-center">📖</span>
                           </div>
                         )}
                       </div>
-                      <div className="p-4 bg-slate-50/50 flex justify-between items-center border-t border-slate-100">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Child: {book.childName}</span>
-                        <div className="flex gap-2.5">
+                      <div className="p-3 bg-slate-50/50 flex flex-wrap justify-between items-center gap-x-2 gap-y-1 border-t border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase truncate min-w-0">Child: {book.childName}</span>
+                        <div className="flex items-center gap-2 shrink-0">
                           <button
                             onClick={() => {
                               setActiveBook(book);
@@ -1241,7 +1241,7 @@ export default function App() {
                               setWizardStep(7); // Jump directly to Flip Book preview
                               setActiveTab("wizard");
                             }}
-                            className="text-xs font-bold text-emerald-600 hover:underline"
+                            className="text-[11px] font-bold text-emerald-600 hover:underline whitespace-nowrap"
                           >
                             Open Book
                           </button>
@@ -1281,38 +1281,38 @@ export default function App() {
                 </div>
               ) : (
                 // character sheets grid
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                   {characters.map((char) => (
                     // bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between hover:shadow-md transition
                     <div
                       key={char.id}
-                      className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between"
+                      className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between"
                     >
                       <div className="space-y-3">
                         <div className="flex gap-2.5 items-center">
-                          <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-lg font-bold">
+                          <div className="h-9 w-9 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-base font-bold">
                             👤
                           </div>
-                          <div>
-                            <h5 className="font-extrabold text-slate-800 text-sm">{char.name}</h5>
+                          <div className="min-w-0">
+                            <h5 className="font-extrabold text-slate-800 text-sm truncate">{char.name}</h5>
                             <span className="text-[10px] text-slate-400 font-bold uppercase">{char.age} y/o {char.gender}</span>
                           </div>
                         </div>
-                        <p className="text-xs text-slate-500 leading-normal line-clamp-3 italic">
+                        <p className="text-[11px] text-slate-500 leading-normal line-clamp-3 italic">
                           &ldquo;{char.description}&rdquo;
                         </p>
                       </div>
 
-                      <div className="flex justify-between items-center mt-5 pt-3 border-t border-slate-100">
+                      <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-1 mt-4 pt-3 border-t border-slate-100">
                         <button
                           onClick={() => {
                             setCreatedCharacter(char);
                             setWizardStep(2); // Character Sheet steps
                             setActiveTab("wizard");
                           }}
-                          className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1"
+                          className="text-[11px] font-bold text-emerald-600 hover:underline flex items-center gap-1 min-w-0"
                         >
-                          <FileText className="h-3.5 w-3.5" /> View Poses Sheet
+                          <FileText className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Poses Sheet</span>
                         </button>
                         <button
                           onClick={async () => {
