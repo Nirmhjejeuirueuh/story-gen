@@ -321,7 +321,7 @@ export default function BookPreview({ book, onGenerateCover }: BookPreviewProps)
 
       {/* --- THUMBNAIL GRID VIEW --- */}
       {viewMode === "grid" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6" id="thumbnail-grid">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6" id="thumbnail-grid">
           {book.coverImageStatus === "Completed" && book.coverImageUrl ? (
             <div className="relative rounded-2xl overflow-hidden shadow-md aspect-square select-none">
               <img src={book.coverImageUrl} alt="Book cover" referrerPolicy="no-referrer" className="w-full h-full object-cover" />

@@ -633,7 +633,7 @@ export default function App() {
                     No books compiled yet. Click &ldquo;Create Storybook&rdquo; above to start!
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6">
                     {books.slice(0, 3).map((book) => (
                       <div
                         key={book.id}
@@ -1202,7 +1202,7 @@ export default function App() {
                   Your library is currently empty. Run the Story Wizard to build your first book!
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6">
                   {books.map((book) => (
                     <div
                       key={book.id}
@@ -1278,7 +1278,7 @@ export default function App() {
                   No character profiles created. Start a new book inside the Story Wizard!
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6">
                   {characters.map((char) => (
                     <div
                       key={char.id}
