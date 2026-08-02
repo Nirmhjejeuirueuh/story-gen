@@ -633,13 +633,14 @@ export default function App() {
                     No books compiled yet. Click &ldquo;Create Storybook&rdquo; above to start!
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6">
+                  //dashboard grid
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6"> 
                     {books.slice(0, 3).map((book) => (
                       <div
                         key={book.id}
                         className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between"
                       >
-                        <div className="aspect-[16/10] relative overflow-hidden bg-slate-900 text-white border-b border-slate-200 select-none">
+                        <div className="aspect-[10/10] relative overflow-hidden bg-slate-900 text-white border-b border-slate-200 select-none">
                           {book.coverImageStatus === "Completed" && book.coverImageUrl ? (
                             <>
                               <img src={book.coverImageUrl} alt={book.title} referrerPolicy="no-referrer" className="absolute inset-0 w-full h-full object-cover" />
@@ -1202,7 +1203,8 @@ export default function App() {
                   Your library is currently empty. Run the Story Wizard to build your first book!
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6">
+                //my books grid
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6"> 
                   {books.map((book) => (
                     <div
                       key={book.id}
@@ -1278,11 +1280,13 @@ export default function App() {
                   No character profiles created. Start a new book inside the Story Wizard!
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6">
+                // character sheets grid
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
                   {characters.map((char) => (
+                    // bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between hover:shadow-md transition
                     <div
                       key={char.id}
-                      className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between"
+                      className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col justify-between"
                     >
                       <div className="space-y-3">
                         <div className="flex gap-2.5 items-center">

@@ -319,7 +319,7 @@ export default function StoryLibraryBrowser({ onCreate, isCreating = false }: St
           No story library templates found. Add one under <code className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600">server/stories/&lt;id&gt;/</code> with a <code className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600">chapters/</code> folder and a <code className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600">charators/</code> folder.
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {stories.map((story) => (
             <div
               key={story.id}
